@@ -15,6 +15,8 @@ swiftc \
     -framework AVFAudio \
     -framework AppKit \
     -framework CoreGraphics \
+    -framework CoreAudio \
+    -framework AudioToolbox \
     "$SCRIPT_DIR/Sources/AudioCapture.swift"
 
 echo "Built: $BIN_DIR/notetaker-audio"

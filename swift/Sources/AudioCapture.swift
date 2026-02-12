@@ -4,6 +4,122 @@ import AVFAudio
 import CoreGraphics
 import Foundation
 import AppKit
+import CoreAudio
+import AudioToolbox
+
+// MARK: - Mic Capture via AVAudioEngine
+
+class MicCapture {
+    private let engine = AVAudioEngine()
+    private var audioFile: AVAudioFile?
+    private(set) var startHostTime: UInt64 = 0
+
+    func start(outputPath: String, deviceName: String?) throws {
+        let input = engine.inputNode
+
+        // If deviceName specified, find and set the audio device
+        if let name = deviceName {
+            let deviceID = try findInputDevice(named: name)
+            var id = deviceID
+            let err = AudioUnitSetProperty(
+                input.audioUnit!,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global, 0,
+                &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            if err != noErr {
+                throw MicError.cannotSetDevice(name)
+            }
+        }
+
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0 else {
+            throw MicError.noInputAvailable
+        }
+
+        let url = URL(fileURLWithPath: outputPath)
+        audioFile = try AVAudioFile(forWriting: url,
+                                     settings: format.settings,
+                                     commonFormat: .pcmFormatFloat32,
+                                     interleaved: true)
+
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, time in
+            guard let self else { return }
+            if self.startHostTime == 0 {
+                self.startHostTime = time.hostTime
+            }
+            try? self.audioFile?.write(from: buffer)
+        }
+        try engine.start()
+        fputs("Recording microphone audio to \(outputPath)...\n", stderr)
+    }
+
+    func stop() {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        audioFile = nil
+    }
+
+    enum MicError: Error, CustomStringConvertible {
+        case deviceNotFound(String)
+        case cannotSetDevice(String)
+        case noInputAvailable
+
+        var description: String {
+            switch self {
+            case .deviceNotFound(let n): return "Input device not found: \(n)"
+            case .cannotSetDevice(let n): return "Cannot set input device: \(n)"
+            case .noInputAvailable: return "No audio input available (sample rate is 0)"
+            }
+        }
+    }
+}
+
+/// Find an input audio device by name, returning its AudioDeviceID.
+func findInputDevice(named name: String) throws -> AudioDeviceID {
+    var propAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain)
+
+    var dataSize: UInt32 = 0
+    AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject),
+                                    &propAddress, 0, nil, &dataSize)
+    let deviceCount = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
+    var devices = [AudioDeviceID](repeating: 0, count: deviceCount)
+    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                &propAddress, 0, nil, &dataSize, &devices)
+
+    for deviceID in devices {
+        // Get device name
+        var nameAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var cfNameRef: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        AudioObjectGetPropertyData(deviceID, &nameAddr, 0, nil, &nameSize, &cfNameRef)
+        let deviceName = cfNameRef?.takeRetainedValue() as String? ?? "(unknown)"
+
+        // Check input channel count
+        var inputAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioObjectPropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain)
+        var bufSize: UInt32 = 0
+        AudioObjectGetPropertyDataSize(deviceID, &inputAddr, 0, nil, &bufSize)
+        if bufSize > 0 {
+            let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
+            defer { bufferList.deallocate() }
+            AudioObjectGetPropertyData(deviceID, &inputAddr, 0, nil, &bufSize, bufferList)
+            let inputChannels = UnsafeMutableAudioBufferListPointer(bufferList)
+                .reduce(0) { $0 + Int($1.mNumberChannels) }
+            if inputChannels > 0 && deviceName.lowercased().contains(name.lowercased()) {
+                return deviceID
+            }
+        }
+    }
+    throw MicCapture.MicError.deviceNotFound(name)
+}
 
 // MARK: - System Audio Capture via ScreenCaptureKit
 
@@ -14,6 +130,9 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
     private let captureQueue = DispatchQueue(label: "com.notetaker.audioCapture", qos: .userInitiated)
 
     private let outputPath: String
+
+    // Timestamp for sync alignment
+    private(set) var startHostTime: UInt64 = 0
 
     // Silence detection
     private var peakLevel: Float = 0.0
@@ -108,6 +227,11 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         guard let audioFile else { return }
         guard CMSampleBufferGetNumSamples(sampleBuffer) > 0 else { return }
 
+        // Capture start host time from first audio buffer
+        if startHostTime == 0 {
+            startHostTime = mach_absolute_time()
+        }
+
         // Get format from sample buffer
         guard let formatDesc = sampleBuffer.formatDescription,
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else { return }
@@ -194,7 +318,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
 
         let seconds = Double(totalFrames) / 48000.0
         fputs("Saved \(outputPath) (\(String(format: "%.1f", seconds)) seconds, peak=\(String(format: "%.6f", peakLevel)))\n", stderr)
-        if silenceWarned || (totalFrames > 0 && peakLevel < 1e-6) {
+        if totalFrames > 0 && peakLevel < 1e-6 {
             fputs("[SILENCE_WARNING] Recording appears silent. Check Screen Recording permission.\n", stderr)
         }
     }
@@ -223,6 +347,181 @@ func listAudioApps() {
     }
 }
 
+// MARK: - List input devices
+
+func listInputDevices() {
+    // Get default input device
+    var defaultAddr = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultInputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain)
+    var defaultDevice: AudioDeviceID = 0
+    var defaultSize = UInt32(MemoryLayout<AudioDeviceID>.size)
+    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                &defaultAddr, 0, nil, &defaultSize, &defaultDevice)
+
+    // Enumerate all devices
+    var propAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain)
+
+    var dataSize: UInt32 = 0
+    AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject),
+                                    &propAddress, 0, nil, &dataSize)
+    let deviceCount = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
+    var devices = [AudioDeviceID](repeating: 0, count: deviceCount)
+    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                &propAddress, 0, nil, &dataSize, &devices)
+
+    print("Input devices:")
+    for deviceID in devices {
+        // Get device name
+        var nameAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var cfNameRef: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        AudioObjectGetPropertyData(deviceID, &nameAddr, 0, nil, &nameSize, &cfNameRef)
+        let name = cfNameRef?.takeRetainedValue() as String? ?? "(unknown)"
+
+        // Check input channel count
+        var inputAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioObjectPropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain)
+        var bufSize: UInt32 = 0
+        AudioObjectGetPropertyDataSize(deviceID, &inputAddr, 0, nil, &bufSize)
+        guard bufSize > 0 else { continue }
+
+        let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
+        defer { bufferList.deallocate() }
+        AudioObjectGetPropertyData(deviceID, &inputAddr, 0, nil, &bufSize, bufferList)
+        let inputChannels = UnsafeMutableAudioBufferListPointer(bufferList)
+            .reduce(0) { $0 + Int($1.mNumberChannels) }
+
+        if inputChannels > 0 {
+            let suffix = (deviceID == defaultDevice) ? " (default)" : ""
+            print("  \(name)\(suffix)")
+        }
+    }
+}
+
+// MARK: - Merge audio files with timestamp alignment
+
+func mergeAudioFiles(systemPath: String, micPath: String,
+                     systemStartHostTime: UInt64, micStartHostTime: UInt64,
+                     outputPath: String) throws {
+    let systemFile = try AVAudioFile(forReading: URL(fileURLWithPath: systemPath))
+    let micFile = try AVAudioFile(forReading: URL(fileURLWithPath: micPath))
+
+    // Compute offset in seconds between the two start times using mach_timebase_info
+    var timebase = mach_timebase_info_data_t()
+    mach_timebase_info(&timebase)
+    let ticksToNanos = Double(timebase.numer) / Double(timebase.denom)
+
+    let systemStartNanos = Double(systemStartHostTime) * ticksToNanos
+    let micStartNanos = Double(micStartHostTime) * ticksToNanos
+    let offsetSeconds = (micStartNanos - systemStartNanos) / 1_000_000_000.0
+
+    let outputSampleRate: Double = 48000
+    let outputChannels: AVAudioChannelCount = 2
+    let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                      sampleRate: outputSampleRate,
+                                      channels: outputChannels,
+                                      interleaved: true)!
+    let outputFile = try AVAudioFile(forWriting: URL(fileURLWithPath: outputPath),
+                                      settings: outputFormat.settings,
+                                      commonFormat: .pcmFormatFloat32,
+                                      interleaved: true)
+
+    // Always convert: processingFormat is non-interleaved, output is interleaved
+    let sysConverter = AVAudioConverter(from: systemFile.processingFormat, to: outputFormat)!
+    let micConverter = AVAudioConverter(from: micFile.processingFormat, to: outputFormat)!
+
+    // Offset in frames: positive means mic started later (system has leading frames)
+    let offsetFrames = Int64(offsetSeconds * outputSampleRate)
+
+    let chunkSize: AVAudioFrameCount = 8192
+    let systemLength = Int64(systemFile.length)
+    let micLength = Int64(micFile.length)
+
+    // Calculate total output length accounting for offset
+    let systemEndFrame = (offsetFrames >= 0) ? systemLength : systemLength + (-offsetFrames)
+    let micEndFrame = (offsetFrames >= 0) ? micLength + offsetFrames : micLength
+    let totalOutputFrames = max(systemEndFrame, micEndFrame)
+
+    var outputFrame: Int64 = 0
+
+    while outputFrame < totalOutputFrames {
+        let framesToProcess = AVAudioFrameCount(min(Int64(chunkSize), totalOutputFrames - outputFrame))
+        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: framesToProcess) else { break }
+        outBuffer.frameLength = framesToProcess
+
+        // Zero the output buffer
+        let outPtr = outBuffer.floatChannelData![0]
+        for i in 0..<Int(framesToProcess * outputChannels) {
+            outPtr[i] = 0
+        }
+
+        // Read and mix system audio
+        let sysFrameInFile = (offsetFrames >= 0) ? outputFrame : outputFrame + offsetFrames
+        if sysFrameInFile >= 0 && sysFrameInFile < systemLength {
+            let sysReadCount = AVAudioFrameCount(min(Int64(framesToProcess), systemLength - sysFrameInFile))
+            if sysReadCount > 0 {
+                systemFile.framePosition = AVAudioFramePosition(sysFrameInFile)
+                if let sysBuf = AVAudioPCMBuffer(pcmFormat: systemFile.processingFormat, frameCapacity: sysReadCount) {
+                    try systemFile.read(into: sysBuf, frameCount: sysReadCount)
+                    guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: sysReadCount) else { break }
+                    try sysConverter.convert(to: converted, from: sysBuf)
+                    // Mix into output
+                    let srcPtr = converted.floatChannelData![0]
+                    let count = Int(converted.frameLength * outputChannels)
+                    for i in 0..<count {
+                        outPtr[i] += srcPtr[i]
+                    }
+                }
+            }
+        }
+
+        // Read and mix mic audio
+        let micFrameInFile = (offsetFrames >= 0) ? outputFrame - offsetFrames : outputFrame
+        if micFrameInFile >= 0 && micFrameInFile < micLength {
+            let micReadCount = AVAudioFrameCount(min(Int64(framesToProcess), micLength - micFrameInFile))
+            if micReadCount > 0 {
+                micFile.framePosition = AVAudioFramePosition(micFrameInFile)
+                if let micBuf = AVAudioPCMBuffer(pcmFormat: micFile.processingFormat, frameCapacity: micReadCount) {
+                    try micFile.read(into: micBuf, frameCount: micReadCount)
+                    guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: micReadCount) else { break }
+                    try micConverter.convert(to: converted, from: micBuf)
+                    // Mix into output
+                    let srcPtr = converted.floatChannelData![0]
+                    let count = Int(converted.frameLength * outputChannels)
+                    for i in 0..<count {
+                        outPtr[i] += srcPtr[i]
+                    }
+                }
+            }
+        }
+
+        // Clamp to [-1, 1]
+        let totalSamples = Int(framesToProcess * outputChannels)
+        for i in 0..<totalSamples {
+            outPtr[i] = max(-1.0, min(1.0, outPtr[i]))
+        }
+
+        try outputFile.write(from: outBuffer)
+        outputFrame += Int64(framesToProcess)
+    }
+
+    // Delete temp files
+    try? FileManager.default.removeItem(atPath: systemPath)
+    try? FileManager.default.removeItem(atPath: micPath)
+
+    fputs("Merged audio saved to \(outputPath)\n", stderr)
+}
+
 // MARK: - Main
 
 func printUsage() {
@@ -230,12 +529,20 @@ func printUsage() {
     notetaker-audio — system audio capture helper
 
     USAGE:
-        notetaker-audio capture --output FILE
+        notetaker-audio capture --output FILE [--mic] [--mic-device NAME]
         notetaker-audio list-apps
+        notetaker-audio list-devices
 
     OPTIONS:
         --output, -o FILE    Output WAV file path (required for capture)
+        --mic                Also capture microphone input
+        --mic-device NAME    Use specific mic input device (implies --mic)
         --help, -h           Show this help
+
+    SUBCOMMANDS:
+        capture              Record audio to a WAV file
+        list-apps            Show running applications
+        list-devices         Show available audio input devices
 
     """, stderr)
 }
@@ -253,12 +560,17 @@ func main() {
     case "list-apps":
         listAudioApps()
 
+    case "list-devices":
+        listInputDevices()
+
     case "capture":
         // Initialize NSApplication so the picker GUI can render
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
         var outputPath: String?
+        var enableMic = false
+        var micDeviceName: String?
 
         var i = 2
         while i < args.count {
@@ -270,6 +582,16 @@ func main() {
                     exit(1)
                 }
                 outputPath = args[i]
+            case "--mic":
+                enableMic = true
+            case "--mic-device":
+                i += 1
+                guard i < args.count else {
+                    fputs("Error: --mic-device requires a device name\n", stderr)
+                    exit(1)
+                }
+                micDeviceName = args[i]
+                enableMic = true  // --mic-device implies --mic
             default:
                 fputs("Unknown option: \(args[i])\n", stderr)
                 printUsage()
@@ -284,13 +606,43 @@ func main() {
             exit(1)
         }
 
-        let capture = SystemAudioCapture(outputPath: output)
+        // Determine paths: if mic enabled, use temp files then merge
+        let systemPath = enableMic ? output + ".sys.tmp.wav" : output
+        let micPath = output + ".mic.tmp.wav"
+
+        let capture = SystemAudioCapture(outputPath: systemPath)
+        var micCapture: MicCapture?
+
+        if enableMic {
+            let mic = MicCapture()
+            do {
+                try mic.start(outputPath: micPath, deviceName: micDeviceName)
+            } catch {
+                fputs("Error starting mic capture: \(error)\n", stderr)
+                exit(1)
+            }
+            micCapture = mic
+        }
 
         // Handle Ctrl+C gracefully
         let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         signal(SIGINT, SIG_IGN)
         sigintSource.setEventHandler {
             capture.stop()
+            if let mic = micCapture {
+                mic.stop()
+                // Merge the two files
+                do {
+                    try mergeAudioFiles(
+                        systemPath: systemPath,
+                        micPath: micPath,
+                        systemStartHostTime: capture.startHostTime,
+                        micStartHostTime: mic.startHostTime,
+                        outputPath: output)
+                } catch {
+                    fputs("Error merging audio: \(error)\n", stderr)
+                }
+            }
             exit(0)
         }
         sigintSource.resume()
@@ -299,6 +651,19 @@ func main() {
         signal(SIGTERM, SIG_IGN)
         sigtermSource.setEventHandler {
             capture.stop()
+            if let mic = micCapture {
+                mic.stop()
+                do {
+                    try mergeAudioFiles(
+                        systemPath: systemPath,
+                        micPath: micPath,
+                        systemStartHostTime: capture.startHostTime,
+                        micStartHostTime: mic.startHostTime,
+                        outputPath: output)
+                } catch {
+                    fputs("Error merging audio: \(error)\n", stderr)
+                }
+            }
             exit(0)
         }
         sigtermSource.resume()
