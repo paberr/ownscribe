@@ -1,0 +1,28 @@
+[project]
+name = "notetaker"
+version = "0.1.0"
+description = "Fully local meeting transcription and summarization CLI"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Pascal Berrang", email = "git@p4l.dev" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "sounddevice>=0.5",
+    "soundfile>=0.13",
+    "ollama>=0.4",
+    "openai>=1.0",
+    "whisperx>=3.7",
+]
+
+[project.scripts]
+notetaker = "notetaker.cli:cli"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
