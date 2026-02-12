@@ -26,6 +26,11 @@ class TestDefaults:
         cfg = Config()
         assert cfg.output.format == "markdown"
 
+    def test_default_mic_settings(self):
+        cfg = Config()
+        assert cfg.audio.mic is False
+        assert cfg.audio.mic_device == ""
+
 
 class TestMergeToml:
     def test_full_override(self):
@@ -48,6 +53,13 @@ class TestMergeToml:
         # Other sections unchanged
         assert merged.audio.backend == "coreaudio"
         assert merged.summarization.backend == "ollama"
+
+    def test_mic_settings_from_toml(self):
+        cfg = Config()
+        data = {"audio": {"mic": True, "mic_device": "MacBook Pro Microphone"}}
+        merged = _merge_toml(cfg, data)
+        assert merged.audio.mic is True
+        assert merged.audio.mic_device == "MacBook Pro Microphone"
 
     def test_unknown_keys_ignored(self):
         cfg = Config()

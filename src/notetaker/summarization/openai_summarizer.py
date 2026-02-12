@@ -7,7 +7,7 @@ import openai
 
 from notetaker.config import SummarizationConfig
 from notetaker.summarization.base import Summarizer
-from notetaker.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM
+from notetaker.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM, clean_response
 
 
 class OpenAISummarizer(Summarizer):
@@ -39,4 +39,4 @@ class OpenAISummarizer(Summarizer):
                 {"role": "user", "content": prompt},
             ],
         )
-        return response.choices[0].message.content or ""
+        return clean_response(response.choices[0].message.content or "")

@@ -17,9 +17,10 @@ from notetaker.config import Config, ensure_config_file
 @click.option("--diarize", is_flag=True, help="Enable speaker diarization (needs HF token).")
 @click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default=None, help="Output format.")
 @click.option("--model", default=None, help="Whisper model size (tiny, base, small, medium, large-v3).")
-@click.option("--pid", type=int, default=None, help="Record audio from a specific app (use its PID). See 'notetaker apps'.")
+@click.option("--mic", is_flag=True, help="Also capture microphone input (mixed with system audio).")
+@click.option("--mic-device", default=None, help="Specific mic device name (implies --mic).")
 @click.pass_context
-def cli(ctx: click.Context, device: str | None, no_summarize: bool, diarize: bool, output_format: str | None, model: str | None, pid: int | None) -> None:
+def cli(ctx: click.Context, device: str | None, no_summarize: bool, diarize: bool, output_format: str | None, model: str | None, mic: bool, mic_device: str | None) -> None:
     """Fully local meeting transcription and summarization.
 
     Run without a subcommand to record, transcribe, and summarize a meeting.
@@ -40,20 +41,29 @@ def cli(ctx: click.Context, device: str | None, no_summarize: bool, diarize: boo
         config.output.format = output_format
     if model:
         config.transcription.model = model
+    if mic or mic_device:
+        config.audio.mic = True
+    if mic_device:
+        config.audio.mic_device = mic_device
 
     ctx.obj["config"] = config
 
     if ctx.invoked_subcommand is None:
         from notetaker.pipeline import run_pipeline
-        run_pipeline(config, pid=pid)
+        run_pipeline(config)
 
 
 @cli.command()
 def devices() -> None:
     """List available audio input devices."""
-    import sounddevice as sd
-    click.echo("Available audio devices:\n")
-    click.echo(sd.query_devices())
+    from notetaker.audio.coreaudio import CoreAudioRecorder
+    recorder = CoreAudioRecorder()
+    if recorder.is_available():
+        click.echo(recorder.list_devices())
+    else:
+        import sounddevice as sd
+        click.echo("Available audio devices:\n")
+        click.echo(sd.query_devices())
 
 
 @cli.command()

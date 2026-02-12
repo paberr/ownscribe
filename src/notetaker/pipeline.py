@@ -50,12 +50,12 @@ def _get_output_dir(config: Config) -> Path:
     return out_dir
 
 
-def _create_recorder(config: Config, pid: int | None = None):
+def _create_recorder(config: Config):
     """Create the appropriate audio recorder based on config."""
     if config.audio.backend == "coreaudio" and not config.audio.device:
         from notetaker.audio.coreaudio import CoreAudioRecorder
 
-        recorder = CoreAudioRecorder(pid=pid)
+        recorder = CoreAudioRecorder(mic=config.audio.mic, mic_device=config.audio.mic_device)
         if recorder.is_available():
             return recorder
         click.echo("Core Audio helper not found, falling back to sounddevice.")
@@ -99,13 +99,13 @@ def _format_output(config: Config, transcript_result, summary_text: str | None =
         return tx, sm
 
 
-def run_pipeline(config: Config, pid: int | None = None) -> None:
+def run_pipeline(config: Config) -> None:
     """Run the full pipeline: record, transcribe, summarize, output."""
     out_dir = _get_output_dir(config)
     audio_path = out_dir / "recording.wav"
 
     # 1. Record
-    recorder = _create_recorder(config, pid=pid)
+    recorder = _create_recorder(config)
     click.echo("Starting recording... Press Ctrl+C to stop.\n")
     recorder.start(audio_path)
 

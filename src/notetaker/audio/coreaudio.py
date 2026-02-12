@@ -29,8 +29,9 @@ def _find_binary() -> Path | None:
 class CoreAudioRecorder(AudioRecorder):
     """Records system audio using the notetaker-audio Swift helper."""
 
-    def __init__(self, pid: int | None = None) -> None:
-        self._pid = pid
+    def __init__(self, mic: bool = False, mic_device: str = "") -> None:
+        self._mic = mic
+        self._mic_device = mic_device
         self._process: subprocess.Popen | None = None
         self._binary = _find_binary()
         self._silence_warning: bool = False
@@ -45,8 +46,10 @@ class CoreAudioRecorder(AudioRecorder):
             )
 
         cmd = [str(self._binary), "capture", "--output", str(output_path)]
-        if self._pid is not None:
-            cmd.extend(["--pid", str(self._pid)])
+        if self._mic or self._mic_device:
+            cmd.append("--mic")
+        if self._mic_device:
+            cmd.extend(["--mic-device", self._mic_device])
 
         self._process = subprocess.Popen(
             cmd,
@@ -75,6 +78,17 @@ class CoreAudioRecorder(AudioRecorder):
                     self._silence_warning = True
                 import click
                 click.echo(stderr_output.strip(), err=True)
+
+    def list_devices(self) -> str:
+        """List available audio devices using the Swift helper."""
+        if not self._binary:
+            return "notetaker-audio binary not found. Run: bash swift/build.sh"
+        result = subprocess.run(
+            [str(self._binary), "list-devices"],
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout
 
     def list_apps(self) -> str:
         if not self._binary:

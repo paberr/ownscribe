@@ -5,6 +5,7 @@ Fully local meeting transcription and summarization CLI for macOS. Record system
 ## Features
 
 - **System audio capture** — records all system audio natively via Core Audio Taps (macOS 14.2+), no virtual audio drivers needed
+- **Microphone capture** — optionally record system + mic audio simultaneously with `--mic`
 - **WhisperX transcription** — fast, accurate speech-to-text with word-level timestamps
 - **Speaker diarization** — optional speaker identification via pyannote (requires HuggingFace token)
 - **Local LLM summarization** — structured meeting notes via Ollama, LM Studio, or any OpenAI-compatible server
@@ -55,6 +56,8 @@ This will:
 ### Options
 
 ```bash
+notetaker --mic                               # capture system audio + default mic
+notetaker --mic-device "MacBook Pro Microphone" # capture system audio + specific mic
 notetaker --device "MacBook Pro Microphone"   # use mic instead of system audio
 notetaker --no-summarize                      # skip LLM summarization
 notetaker --diarize                           # enable speaker identification
@@ -65,7 +68,8 @@ notetaker --format json                       # output as JSON instead of markdo
 ### Subcommands
 
 ```bash
-notetaker devices                  # list audio input devices
+notetaker devices                  # list audio devices (uses native CoreAudio when available)
+notetaker apps                     # list running apps with PIDs for use with --pid
 notetaker transcribe recording.wav # transcribe an existing audio file
 notetaker summarize transcript.md  # summarize an existing transcript
 notetaker config                   # open config file in $EDITOR
@@ -79,6 +83,8 @@ Config is stored at `~/.config/notetaker/config.toml`. Run `notetaker config` to
 [audio]
 backend = "coreaudio"     # "coreaudio" or "sounddevice"
 device = ""               # empty = system audio
+mic = false               # also capture microphone input
+mic_device = ""           # specific mic device name (empty = default)
 
 [transcription]
 model = "base"            # tiny, base, small, medium, large-v3

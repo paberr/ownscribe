@@ -14,6 +14,8 @@ DEFAULT_CONFIG_TOML = """\
 [audio]
 backend = "coreaudio"     # "coreaudio" (default) or "sounddevice"
 device = ""               # empty = system audio; or device name/index for sounddevice
+mic = false               # also capture microphone input
+mic_device = ""           # specific mic device name (empty = default)
 
 [transcription]
 model = "base"            # whisper model: tiny, base, small, medium, large-v3
@@ -41,6 +43,8 @@ format = "markdown"       # "markdown" or "json"
 class AudioConfig:
     backend: str = "coreaudio"
     device: str = ""
+    mic: bool = False
+    mic_device: str = ""
 
 
 @dataclass

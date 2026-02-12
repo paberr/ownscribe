@@ -73,7 +73,8 @@ class WhisperXTranscriber(Transcriber):
             and self._diar_config.hf_token
         ):
             click.echo("Running speaker diarization...")
-            diarize_model = whisperx.DiarizationPipeline(
+            from whisperx.diarize import DiarizationPipeline
+            diarize_model = DiarizationPipeline(
                 use_auth_token=self._diar_config.hf_token, device="cpu"
             )
             diarize_kwargs = {}
