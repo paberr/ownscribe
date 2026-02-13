@@ -238,3 +238,8 @@ def _do_transcribe_and_summarize(
         click.echo(f"\n{summary_str or summary}")
     elif not summarize:
         click.echo(f"\n{transcript_str}")
+
+    # Delete recording if configured
+    if not config.output.keep_recording and audio_path.exists():
+        audio_path.unlink()
+        click.echo(f"Recording deleted (keep_recording=false): {audio_path}")

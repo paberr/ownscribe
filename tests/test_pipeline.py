@@ -175,3 +175,39 @@ class TestDoTranscribeAndSummarize:
 
         assert (tmp_path / "transcript.json").exists()
         assert not (tmp_path / "transcript.md").exists()
+
+    def test_keep_recording_false_deletes_wav(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.output.keep_recording = False
+        audio_path = tmp_path / "recording.wav"
+        audio_path.write_bytes(b"fake audio data")
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = self._make_transcript()
+
+        with mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber):
+            _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=False)
+
+        assert (tmp_path / "transcript.md").exists()
+        assert not audio_path.exists()
+
+    def test_keep_recording_true_keeps_wav(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.output.keep_recording = True
+        audio_path = tmp_path / "recording.wav"
+        audio_path.write_bytes(b"fake audio data")
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = self._make_transcript()
+
+        with mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber):
+            _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=False)
+
+        assert (tmp_path / "transcript.md").exists()
+        assert audio_path.exists()

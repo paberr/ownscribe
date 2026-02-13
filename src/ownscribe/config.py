@@ -36,6 +36,7 @@ host = "http://localhost:11434"  # ollama: :11434, LM Studio: :1234
 [output]
 dir = "~/ownscribe"       # base output directory
 format = "markdown"       # "markdown" or "json"
+keep_recording = true     # keep WAV files after transcription; false = auto-delete
 """
 
 
@@ -73,6 +74,7 @@ class SummarizationConfig:
 class OutputConfig:
     dir: str = "~/ownscribe"
     format: str = "markdown"
+    keep_recording: bool = True
 
     @property
     def resolved_dir(self) -> Path:
