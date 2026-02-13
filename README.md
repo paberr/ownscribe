@@ -12,7 +12,7 @@ Record, transcribe, and summarize meetings and system audio entirely on your mac
 
 ## Privacy
 
-ownscribe does not:
+ownscribe **does not**:
 
 - send audio to external servers
 - upload transcripts
