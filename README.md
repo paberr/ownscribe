@@ -39,8 +39,8 @@ On macOS, the Swift audio capture helper is downloaded automatically on first ru
 
 ```bash
 # Clone the repo
-git clone https://github.com/paberr/local-ownscribe.git
-cd local-ownscribe
+git clone https://github.com/paberr/ownscribe.git
+cd ownscribe
 
 # Build the Swift audio capture helper (optional — auto-downloads if skipped)
 bash swift/build.sh
@@ -122,12 +122,24 @@ format = "markdown"       # "markdown" or "json"
 
 ## Speaker Diarization
 
-Speaker identification requires a HuggingFace token with access to [pyannote models](https://huggingface.co/pyannote/speaker-diarization-3.1):
+Speaker identification requires a HuggingFace token with access to the pyannote models:
 
-1. Accept the model terms on HuggingFace
+1. Accept the terms for both models on HuggingFace:
+   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+   - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
 2. Create a token at https://huggingface.co/settings/tokens
 3. Set `HF_TOKEN` env var or add `hf_token` to config
 4. Run with `--diarize`
+
+## Acknowledgments
+
+ownscribe builds on some excellent open-source projects:
+
+- [WhisperX](https://github.com/m-bain/whisperX) — fast speech recognition with word-level timestamps and speaker diarization
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — CTranslate2-based Whisper inference
+- [pyannote.audio](https://github.com/pyannote/pyannote-audio) — speaker diarization
+- [Ollama](https://ollama.ai) — local LLM serving
+- [Click](https://click.palletsprojects.com) — CLI framework
 
 ## License
 
