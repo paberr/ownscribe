@@ -436,21 +436,28 @@ func mergeAudioFiles(systemPath: String, micPath: String,
                                       commonFormat: .pcmFormatFloat32,
                                       interleaved: true)
 
-    // Always convert: processingFormat is non-interleaved, output is interleaved
-    let sysConverter = AVAudioConverter(from: systemFile.processingFormat, to: outputFormat)!
-    let micConverter = AVAudioConverter(from: micFile.processingFormat, to: outputFormat)!
+    // Mic converter using callback API (handles sample rate + channel conversion)
+    let micFormat = micFile.processingFormat
+    let micConverter = AVAudioConverter(from: micFormat, to: outputFormat)!
+    let micRate = micFormat.sampleRate
 
-    // Offset in frames: positive means mic started later (system has leading frames)
+    // Offset in output-rate frames: positive means mic started later
     let offsetFrames = Int64(offsetSeconds * outputSampleRate)
 
     let chunkSize: AVAudioFrameCount = 8192
     let systemLength = Int64(systemFile.length)
-    let micLength = Int64(micFile.length)
+    // Mic file length converted to output-rate frames
+    let micLengthOutput = Int64(Double(micFile.length) * outputSampleRate / micRate)
 
     // Calculate total output length accounting for offset
     let systemEndFrame = (offsetFrames >= 0) ? systemLength : systemLength + (-offsetFrames)
-    let micEndFrame = (offsetFrames >= 0) ? micLength + offsetFrames : micLength
+    let micEndFrame = (offsetFrames >= 0) ? micLengthOutput + offsetFrames : micLengthOutput
     let totalOutputFrames = max(systemEndFrame, micEndFrame)
+
+    // Mic region in output timeline
+    let micOutputStart: Int64 = (offsetFrames >= 0) ? offsetFrames : 0
+    let micOutputEnd: Int64 = micOutputStart + micLengthOutput
+    var micDone = false
 
     var outputFrame: Int64 = 0
 
@@ -465,7 +472,7 @@ func mergeAudioFiles(systemPath: String, micPath: String,
             outPtr[i] = 0
         }
 
-        // Read and mix system audio
+        // Read and mix system audio (manual interleave from non-interleaved processingFormat)
         let sysFrameInFile = (offsetFrames >= 0) ? outputFrame : outputFrame + offsetFrames
         if sysFrameInFile >= 0 && sysFrameInFile < systemLength {
             let sysReadCount = AVAudioFrameCount(min(Int64(framesToProcess), systemLength - sysFrameInFile))
@@ -473,33 +480,58 @@ func mergeAudioFiles(systemPath: String, micPath: String,
                 systemFile.framePosition = AVAudioFramePosition(sysFrameInFile)
                 if let sysBuf = AVAudioPCMBuffer(pcmFormat: systemFile.processingFormat, frameCapacity: sysReadCount) {
                     try systemFile.read(into: sysBuf, frameCount: sysReadCount)
-                    guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: sysReadCount) else { break }
-                    try sysConverter.convert(to: converted, from: sysBuf)
-                    // Mix into output
-                    let srcPtr = converted.floatChannelData![0]
-                    let count = Int(converted.frameLength * outputChannels)
-                    for i in 0..<count {
-                        outPtr[i] += srcPtr[i]
+                    let sysData = sysBuf.floatChannelData!
+                    for i in 0..<Int(sysBuf.frameLength) {
+                        outPtr[i * 2] += sysData[0][i]
+                        outPtr[i * 2 + 1] += sysData[1][i]
                     }
                 }
             }
         }
 
-        // Read and mix mic audio
-        let micFrameInFile = (offsetFrames >= 0) ? outputFrame - offsetFrames : outputFrame
-        if micFrameInFile >= 0 && micFrameInFile < micLength {
-            let micReadCount = AVAudioFrameCount(min(Int64(framesToProcess), micLength - micFrameInFile))
-            if micReadCount > 0 {
-                micFile.framePosition = AVAudioFramePosition(micFrameInFile)
-                if let micBuf = AVAudioPCMBuffer(pcmFormat: micFile.processingFormat, frameCapacity: micReadCount) {
-                    try micFile.read(into: micBuf, frameCount: micReadCount)
-                    guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: micReadCount) else { break }
-                    try micConverter.convert(to: converted, from: micBuf)
-                    // Mix into output
-                    let srcPtr = converted.floatChannelData![0]
-                    let count = Int(converted.frameLength * outputChannels)
+        // Read and mix mic audio using callback-based converter
+        let chunkEnd = outputFrame + Int64(framesToProcess)
+        if !micDone && chunkEnd > micOutputStart && outputFrame < micOutputEnd {
+            let overlapStart = max(outputFrame, micOutputStart)
+            let overlapEnd = min(chunkEnd, micOutputEnd)
+            let micFramesNeeded = AVAudioFrameCount(overlapEnd - overlapStart)
+
+            if micFramesNeeded > 0 {
+                guard let micOutBuf = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: micFramesNeeded) else { break }
+
+                var convError: NSError?
+                let status = micConverter.convert(to: micOutBuf, error: &convError) { inNumberOfPackets, outStatus in
+                    let remaining = AVAudioFrameCount(micFile.length - micFile.framePosition)
+                    if remaining == 0 {
+                        outStatus.pointee = .endOfStream
+                        return nil
+                    }
+                    let toRead = min(inNumberOfPackets, remaining)
+                    guard let buf = AVAudioPCMBuffer(pcmFormat: micFormat, frameCapacity: toRead) else {
+                        outStatus.pointee = .endOfStream
+                        return nil
+                    }
+                    do {
+                        try micFile.read(into: buf, frameCount: toRead)
+                        outStatus.pointee = .haveData
+                        return buf
+                    } catch {
+                        outStatus.pointee = .endOfStream
+                        return nil
+                    }
+                }
+
+                if status == .endOfStream {
+                    micDone = true
+                }
+
+                // Mix converted mic audio into output at correct position
+                if micOutBuf.frameLength > 0 {
+                    let offsetInChunk = Int(overlapStart - outputFrame)
+                    let srcPtr = micOutBuf.floatChannelData![0]
+                    let count = Int(micOutBuf.frameLength * outputChannels)
                     for i in 0..<count {
-                        outPtr[i] += srcPtr[i]
+                        outPtr[offsetInChunk * Int(outputChannels) + i] += srcPtr[i]
                     }
                 }
             }
