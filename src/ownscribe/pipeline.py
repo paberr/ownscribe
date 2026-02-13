@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import signal
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 import click
 
-from notetaker.config import Config
+from ownscribe.config import Config
 
 
 def _check_audio_silence(audio_path: Path) -> None:
@@ -53,14 +52,14 @@ def _get_output_dir(config: Config) -> Path:
 def _create_recorder(config: Config):
     """Create the appropriate audio recorder based on config."""
     if config.audio.backend == "coreaudio" and not config.audio.device:
-        from notetaker.audio.coreaudio import CoreAudioRecorder
+        from ownscribe.audio.coreaudio import CoreAudioRecorder
 
         recorder = CoreAudioRecorder(mic=config.audio.mic, mic_device=config.audio.mic_device)
         if recorder.is_available():
             return recorder
         click.echo("Core Audio helper not found, falling back to sounddevice.")
 
-    from notetaker.audio.sounddevice_recorder import SoundDeviceRecorder
+    from ownscribe.audio.sounddevice_recorder import SoundDeviceRecorder
 
     device = config.audio.device or None
     # Try to parse as int (device index)
@@ -71,7 +70,7 @@ def _create_recorder(config: Config):
 
 def _create_transcriber(config: Config):
     """Create the WhisperX transcriber."""
-    from notetaker.transcription.whisperx_transcriber import WhisperXTranscriber
+    from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
 
     diar_config = config.diarization if config.diarization.enabled else None
     return WhisperXTranscriber(config.transcription, diar_config)
@@ -80,20 +79,20 @@ def _create_transcriber(config: Config):
 def _create_summarizer(config: Config):
     """Create the appropriate summarizer based on config."""
     if config.summarization.backend == "openai":
-        from notetaker.summarization.openai_summarizer import OpenAISummarizer
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
         return OpenAISummarizer(config.summarization)
     else:
-        from notetaker.summarization.ollama_summarizer import OllamaSummarizer
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
         return OllamaSummarizer(config.summarization)
 
 
 def _format_output(config: Config, transcript_result, summary_text: str | None = None) -> tuple[str, str | None]:
     """Format transcript and optional summary. Returns (transcript_str, summary_str)."""
     if config.output.format == "json":
-        from notetaker.output.json_output import format_transcript_json
+        from ownscribe.output.json_output import format_transcript_json
         return format_transcript_json(transcript_result), summary_text
     else:
-        from notetaker.output.markdown import format_transcript, format_summary
+        from ownscribe.output.markdown import format_summary, format_transcript
         tx = format_transcript(transcript_result)
         sm = format_summary(summary_text) if summary_text else None
         return tx, sm
@@ -182,7 +181,7 @@ def run_summarize(config: Config, transcript_file: str) -> None:
 
     summary = summarizer.summarize(transcript_text)
 
-    from notetaker.output.markdown import format_summary
+    from ownscribe.output.markdown import format_summary
 
     out_dir = _get_output_dir(config)
     summary_md = format_summary(summary)
@@ -205,10 +204,10 @@ def _do_transcribe_and_summarize(
     except ImportError:
         click.echo(
             "Error: WhisperX is not installed. Install with:\n"
-            "  uv pip install 'notetaker[transcription]'",
+            "  uv pip install 'ownscribe[transcription]'",
             err=True,
         )
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     result = transcriber.transcribe(audio_path)
 

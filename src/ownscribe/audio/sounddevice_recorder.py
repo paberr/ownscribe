@@ -8,7 +8,7 @@ from pathlib import Path
 import sounddevice as sd
 import soundfile as sf
 
-from notetaker.audio.base import AudioRecorder
+from ownscribe.audio.base import AudioRecorder
 
 
 class SoundDeviceRecorder(AudioRecorder):

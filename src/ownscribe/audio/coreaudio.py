@@ -1,33 +1,76 @@
-"""Core Audio Taps recorder — wraps the Swift notetaker-audio helper."""
+"""Core Audio Taps recorder — wraps the Swift ownscribe-audio helper."""
 
 from __future__ import annotations
 
+import platform
 import shutil
 import signal
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
-from notetaker.audio.base import AudioRecorder
+import click
+
+from ownscribe.audio.base import AudioRecorder
 
 # Look for binary relative to package, then in PATH
 _BINARY_CANDIDATES = [
-    Path(__file__).resolve().parents[3] / "bin" / "notetaker-audio",  # dev: repo root
-    Path(sys.prefix) / "bin" / "notetaker-audio",
+    Path(__file__).resolve().parents[3] / "bin" / "ownscribe-audio",  # dev: repo root
+    Path(sys.prefix) / "bin" / "ownscribe-audio",
 ]
+
+_CACHE_DIR = Path.home() / ".local" / "share" / "ownscribe" / "bin"
+_DOWNLOAD_URL = "https://github.com/paberr/ownscribe/releases/latest/download/ownscribe-audio-{arch}"
+
+
+def _download_binary() -> Path | None:
+    """Download the prebuilt ownscribe-audio binary from GitHub Releases."""
+    if sys.platform != "darwin":
+        return None
+
+    arch = platform.machine()
+    if arch not in ("arm64", "x86_64"):
+        return None
+
+    url = _DOWNLOAD_URL.format(arch=arch)
+    dest = _CACHE_DIR / "ownscribe-audio"
+
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        click.echo(f"Downloading ownscribe-audio ({arch}) from GitHub Releases...")
+        urllib.request.urlretrieve(url, dest)
+        dest.chmod(0o755)
+        click.echo(f"Saved to {dest}")
+        return dest
+    except Exception as e:
+        click.echo(f"Download failed: {e}", err=True)
+        # Clean up partial download
+        dest.unlink(missing_ok=True)
+        return None
 
 
 def _find_binary() -> Path | None:
     for candidate in _BINARY_CANDIDATES:
         if candidate.exists() and candidate.is_file():
             return candidate
+
+    # Check cache directory
+    cached = _CACHE_DIR / "ownscribe-audio"
+    if cached.exists() and cached.is_file():
+        return cached
+
     # Fall back to PATH
-    found = shutil.which("notetaker-audio")
-    return Path(found) if found else None
+    found = shutil.which("ownscribe-audio")
+    if found:
+        return Path(found)
+
+    # Try downloading
+    return _download_binary()
 
 
 class CoreAudioRecorder(AudioRecorder):
-    """Records system audio using the notetaker-audio Swift helper."""
+    """Records system audio using the ownscribe-audio Swift helper."""
 
     def __init__(self, mic: bool = False, mic_device: str = "") -> None:
         self._mic = mic
@@ -41,9 +84,7 @@ class CoreAudioRecorder(AudioRecorder):
 
     def start(self, output_path: Path) -> None:
         if not self._binary:
-            raise RuntimeError(
-                "notetaker-audio binary not found. Run: bash swift/build.sh"
-            )
+            raise RuntimeError("ownscribe-audio binary not found. Run: bash swift/build.sh")
 
         cmd = [str(self._binary), "capture", "--output", str(output_path)]
         if self._mic or self._mic_device:
@@ -76,13 +117,12 @@ class CoreAudioRecorder(AudioRecorder):
             if stderr_output:
                 if "[SILENCE_WARNING]" in stderr_output:
                     self._silence_warning = True
-                import click
                 click.echo(stderr_output.strip(), err=True)
 
     def list_devices(self) -> str:
         """List available audio devices using the Swift helper."""
         if not self._binary:
-            return "notetaker-audio binary not found. Run: bash swift/build.sh"
+            return "ownscribe-audio binary not found. Run: bash swift/build.sh"
         result = subprocess.run(
             [str(self._binary), "list-devices"],
             capture_output=True,
@@ -92,7 +132,7 @@ class CoreAudioRecorder(AudioRecorder):
 
     def list_apps(self) -> str:
         if not self._binary:
-            return "notetaker-audio binary not found. Run: bash swift/build.sh"
+            return "ownscribe-audio binary not found. Run: bash swift/build.sh"
         result = subprocess.run(
             [str(self._binary), "list-apps"],
             capture_output=True,

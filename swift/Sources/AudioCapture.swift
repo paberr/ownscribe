@@ -127,7 +127,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
     private var stream: SCStream?
     private var audioFile: AVAudioFile?
     private var audioConverter: AVAudioConverter?
-    private let captureQueue = DispatchQueue(label: "com.notetaker.audioCapture", qos: .userInitiated)
+    private let captureQueue = DispatchQueue(label: "com.ownscribe.audioCapture", qos: .userInitiated)
 
     private let outputPath: String
 
@@ -558,12 +558,12 @@ func mergeAudioFiles(systemPath: String, micPath: String,
 
 func printUsage() {
     fputs("""
-    notetaker-audio — system audio capture helper
+    ownscribe-audio — system audio capture helper
 
     USAGE:
-        notetaker-audio capture --output FILE [--mic] [--mic-device NAME]
-        notetaker-audio list-apps
-        notetaker-audio list-devices
+        ownscribe-audio capture --output FILE [--mic] [--mic-device NAME]
+        ownscribe-audio list-apps
+        ownscribe-audio list-devices
 
     OPTIONS:
         --output, -o FILE    Output WAV file path (required for capture)

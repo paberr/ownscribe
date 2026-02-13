@@ -1,6 +1,6 @@
 """Tests for markdown output formatter."""
 
-from notetaker.output.markdown import _format_time, format_transcript, format_summary
+from ownscribe.output.markdown import _format_time, format_summary, format_transcript
 
 
 class TestFormatTime:

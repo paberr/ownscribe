@@ -13,7 +13,9 @@ def clean_response(text: str) -> str:
         text = _ORPHAN_THINK_CLOSE_RE.sub("", text).strip()
     return text
 
-MEETING_SUMMARY_SYSTEM = """You are a meeting notes assistant. You produce clear, structured summaries of meeting transcripts."""
+MEETING_SUMMARY_SYSTEM = (
+    "You are a meeting notes assistant. You produce clear, structured summaries of meeting transcripts."
+)
 
 MEETING_SUMMARY_PROMPT = """Summarize the following meeting transcript into structured meeting notes.
 

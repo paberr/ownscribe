@@ -6,10 +6,10 @@ BIN_DIR="$(dirname "$SCRIPT_DIR")/bin"
 
 mkdir -p "$BIN_DIR"
 
-echo "Building notetaker-audio..."
+echo "Building ownscribe-audio..."
 swiftc \
     -O \
-    -o "$BIN_DIR/notetaker-audio" \
+    -o "$BIN_DIR/ownscribe-audio" \
     -framework ScreenCaptureKit \
     -framework CoreMedia \
     -framework AVFAudio \
@@ -19,4 +19,4 @@ swiftc \
     -framework AudioToolbox \
     "$SCRIPT_DIR/Sources/AudioCapture.swift"
 
-echo "Built: $BIN_DIR/notetaker-audio"
+echo "Built: $BIN_DIR/ownscribe-audio"

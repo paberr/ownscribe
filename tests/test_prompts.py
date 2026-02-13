@@ -1,6 +1,6 @@
 """Tests for prompt templates."""
 
-from notetaker.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM
+from ownscribe.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM
 
 
 class TestMeetingSummaryPrompt:

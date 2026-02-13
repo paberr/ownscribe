@@ -2,8 +2,8 @@
 
 import json
 
-from notetaker.output.json_output import format_transcript_json
-from notetaker.transcription.models import Segment, TranscriptResult
+from ownscribe.output.json_output import format_transcript_json
+from ownscribe.transcription.models import Segment, TranscriptResult
 
 
 class TestFormatTranscriptJson:

@@ -1,6 +1,6 @@
 """Tests for transcription data models."""
 
-from notetaker.transcription.models import Segment, TranscriptResult
+from ownscribe.transcription.models import Segment, TranscriptResult
 
 
 class TestFullText:

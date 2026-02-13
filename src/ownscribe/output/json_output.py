@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from notetaker.transcription.models import TranscriptResult
+from ownscribe.transcription.models import TranscriptResult
 
 
 def format_transcript_json(result: TranscriptResult) -> str:

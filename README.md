@@ -1,6 +1,7 @@
-# notetaker
+# ownscribe
 
-Fully local meeting transcription and summarization CLI for macOS. Record system audio, transcribe with WhisperX, and summarize with a local LLM. All processing stays on-device.
+Local-first meeting transcription and summarization CLI.
+Record, transcribe, and summarize meetings and system audio entirely on your machine – no cloud, no bots, no data leaving your device.
 
 ## Features
 
@@ -9,7 +10,7 @@ Fully local meeting transcription and summarization CLI for macOS. Record system
 - **WhisperX transcription** — fast, accurate speech-to-text with word-level timestamps
 - **Speaker diarization** — optional speaker identification via pyannote (requires HuggingFace token)
 - **Local LLM summarization** — structured meeting notes via Ollama, LM Studio, or any OpenAI-compatible server
-- **One command** — just run `notetaker`, press Ctrl+C when done, get transcript + summary
+- **One command** — just run `ownscribe`, press Ctrl+C when done, get transcript + summary
 
 ## Requirements
 
@@ -22,14 +23,26 @@ Fully local meeting transcription and summarization CLI for macOS. Record system
   - [LM Studio](https://lmstudio.ai)
   - Any OpenAI-compatible local server
 
+Works with any app that outputs audio through Core Audio (Zoom, Teams, Meet, etc.).
+
 ## Installation
+
+### Quick start with uvx
+
+```bash
+uvx ownscribe
+```
+
+On macOS, the Swift audio capture helper is downloaded automatically on first run.
+
+### From source
 
 ```bash
 # Clone the repo
-git clone <repo-url>
-cd local-meeting-notes
+git clone https://github.com/paberr/local-ownscribe.git
+cd local-ownscribe
 
-# Build the Swift audio capture helper
+# Build the Swift audio capture helper (optional — auto-downloads if skipped)
 bash swift/build.sh
 
 # Install with transcription support
@@ -44,40 +57,40 @@ ollama pull mistral
 ### Record, transcribe, and summarize a meeting
 
 ```bash
-notetaker                    # records system audio, Ctrl+C to stop
+ownscribe                    # records system audio, Ctrl+C to stop
 ```
 
 This will:
 1. Capture system audio until you press Ctrl+C
 2. Transcribe with WhisperX
 3. Summarize with your local LLM
-4. Save everything to `~/notetaker/YYYY-MM-DD_HHMMSS/`
+4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMMSS/`
 
 ### Options
 
 ```bash
-notetaker --mic                               # capture system audio + default mic
-notetaker --mic-device "MacBook Pro Microphone" # capture system audio + specific mic
-notetaker --device "MacBook Pro Microphone"   # use mic instead of system audio
-notetaker --no-summarize                      # skip LLM summarization
-notetaker --diarize                           # enable speaker identification
-notetaker --model large-v3                    # use a larger Whisper model
-notetaker --format json                       # output as JSON instead of markdown
+ownscribe --mic                               # capture system audio + default mic
+ownscribe --mic-device "MacBook Pro Microphone" # capture system audio + specific mic
+ownscribe --device "MacBook Pro Microphone"   # use mic instead of system audio
+ownscribe --no-summarize                      # skip LLM summarization
+ownscribe --diarize                           # enable speaker identification
+ownscribe --model large-v3                    # use a larger Whisper model
+ownscribe --format json                       # output as JSON instead of markdown
 ```
 
 ### Subcommands
 
 ```bash
-notetaker devices                  # list audio devices (uses native CoreAudio when available)
-notetaker apps                     # list running apps with PIDs for use with --pid
-notetaker transcribe recording.wav # transcribe an existing audio file
-notetaker summarize transcript.md  # summarize an existing transcript
-notetaker config                   # open config file in $EDITOR
+ownscribe devices                  # list audio devices (uses native CoreAudio when available)
+ownscribe apps                     # list running apps with PIDs for use with --pid
+ownscribe transcribe recording.wav # transcribe an existing audio file
+ownscribe summarize transcript.md  # summarize an existing transcript
+ownscribe config                   # open config file in $EDITOR
 ```
 
 ## Configuration
 
-Config is stored at `~/.config/notetaker/config.toml`. Run `notetaker config` to create and edit it.
+Config is stored at `~/.config/ownscribe/config.toml`. Run `ownscribe config` to create and edit it.
 
 ```toml
 [audio]
@@ -101,7 +114,7 @@ model = "mistral"
 host = "http://localhost:11434"
 
 [output]
-dir = "~/notetaker"
+dir = "~/ownscribe"
 format = "markdown"       # "markdown" or "json"
 ```
 

@@ -1,14 +1,13 @@
-"""CLI entry point for notetaker."""
+"""CLI entry point for ownscribe."""
 
 from __future__ import annotations
 
 import os
 import subprocess
-import sys
 
 import click
 
-from notetaker.config import Config, ensure_config_file
+from ownscribe.config import Config, ensure_config_file
 
 
 @click.group(invoke_without_command=True)
@@ -20,7 +19,16 @@ from notetaker.config import Config, ensure_config_file
 @click.option("--mic", is_flag=True, help="Also capture microphone input (mixed with system audio).")
 @click.option("--mic-device", default=None, help="Specific mic device name (implies --mic).")
 @click.pass_context
-def cli(ctx: click.Context, device: str | None, no_summarize: bool, diarize: bool, output_format: str | None, model: str | None, mic: bool, mic_device: str | None) -> None:
+def cli(
+    ctx: click.Context,
+    device: str | None,
+    no_summarize: bool,
+    diarize: bool,
+    output_format: str | None,
+    model: str | None,
+    mic: bool,
+    mic_device: str | None,
+) -> None:
     """Fully local meeting transcription and summarization.
 
     Run without a subcommand to record, transcribe, and summarize a meeting.
@@ -49,14 +57,14 @@ def cli(ctx: click.Context, device: str | None, no_summarize: bool, diarize: boo
     ctx.obj["config"] = config
 
     if ctx.invoked_subcommand is None:
-        from notetaker.pipeline import run_pipeline
+        from ownscribe.pipeline import run_pipeline
         run_pipeline(config)
 
 
 @cli.command()
 def devices() -> None:
     """List available audio input devices."""
-    from notetaker.audio.coreaudio import CoreAudioRecorder
+    from ownscribe.audio.coreaudio import CoreAudioRecorder
     recorder = CoreAudioRecorder()
     if recorder.is_available():
         click.echo(recorder.list_devices())
@@ -82,7 +90,7 @@ def transcribe(ctx: click.Context, file: str, diarize: bool, model: str | None, 
     if output_format:
         config.output.format = output_format
 
-    from notetaker.pipeline import run_transcribe
+    from ownscribe.pipeline import run_transcribe
     run_transcribe(config, file)
 
 
@@ -93,14 +101,14 @@ def summarize(ctx: click.Context, file: str) -> None:
     """Summarize a transcript file."""
     config = ctx.obj["config"]
 
-    from notetaker.pipeline import run_summarize
+    from ownscribe.pipeline import run_summarize
     run_summarize(config, file)
 
 
 @cli.command()
 def apps() -> None:
     """List running apps with PIDs for use with --pid."""
-    from notetaker.audio.coreaudio import CoreAudioRecorder
+    from ownscribe.audio.coreaudio import CoreAudioRecorder
     recorder = CoreAudioRecorder()
     click.echo(recorder.list_apps())
 

@@ -5,9 +5,9 @@ from __future__ import annotations
 import click
 import ollama
 
-from notetaker.config import SummarizationConfig
-from notetaker.summarization.base import Summarizer
-from notetaker.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM, clean_response
+from ownscribe.config import SummarizationConfig
+from ownscribe.summarization.base import Summarizer
+from ownscribe.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM, clean_response
 
 
 class OllamaSummarizer(Summarizer):

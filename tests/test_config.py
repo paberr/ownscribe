@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from notetaker.config import Config, _merge_toml, ensure_config_file, OutputConfig
+from ownscribe.config import Config, OutputConfig, _merge_toml, ensure_config_file
 
 
 class TestDefaults:
@@ -70,47 +70,51 @@ class TestMergeToml:
 
 class TestEnvOverrides:
     def test_hf_token_from_env(self):
-        with mock.patch.dict(os.environ, {"HF_TOKEN": "hf_test123"}):
-            with mock.patch("notetaker.config.CONFIG_PATH") as mock_path:
-                mock_path.exists.return_value = False
-                cfg = Config.load()
+        with (
+            mock.patch.dict(os.environ, {"HF_TOKEN": "hf_test123"}),
+            mock.patch("ownscribe.config.CONFIG_PATH") as mock_path,
+        ):
+            mock_path.exists.return_value = False
+            cfg = Config.load()
         assert cfg.diarization.hf_token == "hf_test123"
 
     def test_ollama_host_from_env(self):
-        with mock.patch.dict(os.environ, {"OLLAMA_HOST": "http://remote:11434"}):
-            with mock.patch("notetaker.config.CONFIG_PATH") as mock_path:
-                mock_path.exists.return_value = False
-                cfg = Config.load()
+        with (
+            mock.patch.dict(os.environ, {"OLLAMA_HOST": "http://remote:11434"}),
+            mock.patch("ownscribe.config.CONFIG_PATH") as mock_path,
+        ):
+            mock_path.exists.return_value = False
+            cfg = Config.load()
         assert cfg.summarization.host == "http://remote:11434"
 
 
 class TestEnsureConfigFile:
     def test_creates_file_when_missing(self, tmp_path):
-        config_dir = tmp_path / "notetaker"
+        config_dir = tmp_path / "ownscribe"
         config_path = config_dir / "config.toml"
-        with mock.patch("notetaker.config.CONFIG_DIR", config_dir), \
-             mock.patch("notetaker.config.CONFIG_PATH", config_path):
+        with mock.patch("ownscribe.config.CONFIG_DIR", config_dir), \
+             mock.patch("ownscribe.config.CONFIG_PATH", config_path):
             result = ensure_config_file()
         assert result.exists()
         assert "[audio]" in result.read_text()
 
     def test_does_not_overwrite_existing(self, tmp_path):
-        config_dir = tmp_path / "notetaker"
+        config_dir = tmp_path / "ownscribe"
         config_dir.mkdir()
         config_path = config_dir / "config.toml"
         config_path.write_text("# custom config\n")
-        with mock.patch("notetaker.config.CONFIG_DIR", config_dir), \
-             mock.patch("notetaker.config.CONFIG_PATH", config_path):
+        with mock.patch("ownscribe.config.CONFIG_DIR", config_dir), \
+             mock.patch("ownscribe.config.CONFIG_PATH", config_path):
             ensure_config_file()
         assert config_path.read_text() == "# custom config\n"
 
 
 class TestResolvedDir:
     def test_expands_tilde(self):
-        cfg = OutputConfig(dir="~/notetaker")
+        cfg = OutputConfig(dir="~/ownscribe")
         resolved = cfg.resolved_dir
         assert "~" not in str(resolved)
-        assert str(resolved).endswith("notetaker")
+        assert str(resolved).endswith("ownscribe")
 
     def test_absolute_path_unchanged(self):
         cfg = OutputConfig(dir="/tmp/notes")

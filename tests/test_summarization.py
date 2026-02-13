@@ -1,6 +1,9 @@
-"""Tests for summarization helpers."""
+"""Tests for summarization helpers and backends."""
 
-from notetaker.summarization.prompts import clean_response
+from __future__ import annotations
+
+from ownscribe.config import SummarizationConfig
+from ownscribe.summarization.prompts import clean_response
 
 
 class TestCleanResponse:
@@ -13,10 +16,7 @@ class TestCleanResponse:
         assert clean_response(text) == text
 
     def test_multiline_thinking_block(self):
-        raw = (
-            "<think>\nline1\nline2\nline3\n</think>\n"
-            "## Summary\nActual content"
-        )
+        raw = "<think>\nline1\nline2\nline3\n</think>\n## Summary\nActual content"
         assert clean_response(raw) == "## Summary\nActual content"
 
     def test_case_insensitive(self):
@@ -30,3 +30,120 @@ class TestCleanResponse:
     def test_orphaned_close_think_tag(self):
         raw = "1. Analyze\n2. Plan\n</think>\n## Summary\nActual content"
         assert clean_response(raw) == "## Summary\nActual content"
+
+
+class TestOllamaSummarizer:
+    """Test OllamaSummarizer against a mock HTTP server."""
+
+    def test_summarize(self, httpserver):
+        response_body = {
+            "message": {"role": "assistant", "content": "<think>reasoning</think>\n## Summary\nMeeting went well."},
+            "done": True,
+        }
+        httpserver.expect_request("/api/chat", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="ollama", model="test-model")
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        result = summarizer.summarize("Alice: Hello\nBob: Hi")
+
+        # Verify think tags are cleaned
+        assert "<think>" not in result
+        assert "## Summary" in result
+        assert "Meeting went well." in result
+
+    def test_is_available_success(self, httpserver):
+        httpserver.expect_request("/api/tags", method="GET").respond_with_json({"models": []})
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="ollama", model="test-model")
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        assert summarizer.is_available() is True
+
+    def test_is_available_failure(self):
+        config = SummarizationConfig(host="http://localhost:1", backend="ollama", model="test-model")
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        assert summarizer.is_available() is False
+
+
+class TestOpenAISummarizer:
+    """Test OpenAISummarizer against a mock HTTP server."""
+
+    def test_summarize(self, httpserver):
+        response_body = {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "## Summary\nDecisions were made."},
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "test-model",
+        }
+        httpserver.expect_request("/v1/chat/completions", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="openai", model="test-model")
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        result = summarizer.summarize("Alice: Hello\nBob: Hi")
+
+        assert "## Summary" in result
+        assert "Decisions were made." in result
+
+    def test_is_available_success(self, httpserver):
+        httpserver.expect_request("/v1/models", method="GET").respond_with_json({"data": [], "object": "list"})
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="openai", model="test-model")
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        assert summarizer.is_available() is True
+
+    def test_is_available_failure(self):
+        config = SummarizationConfig(host="http://localhost:1", backend="openai", model="test-model")
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        assert summarizer.is_available() is False
+
+    def test_summarize_cleans_think_tags(self, httpserver):
+        response_body = {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>internal reasoning</think>\n## Summary\nCleaned output.",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "test-model",
+        }
+        httpserver.expect_request("/v1/chat/completions", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="openai", model="test-model")
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        result = summarizer.summarize("transcript text")
+
+        assert "<think>" not in result
+        assert "## Summary" in result
+        assert "Cleaned output." in result

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import click
 
-from notetaker.config import DiarizationConfig, TranscriptionConfig
-from notetaker.transcription.base import Transcriber
-from notetaker.transcription.models import Segment, TranscriptResult, Word
+from ownscribe.config import DiarizationConfig, TranscriptionConfig
+from ownscribe.transcription.base import Transcriber
+from ownscribe.transcription.models import Segment, TranscriptResult, Word
 
 
 class WhisperXTranscriber(Transcriber):

@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "notetaker-audio",
+    name: "ownscribe-audio",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "notetaker-audio",
+            name: "ownscribe-audio",
             path: "Sources",
             linkerSettings: [
                 .linkedFramework("CoreAudio"),

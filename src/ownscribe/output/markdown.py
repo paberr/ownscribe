@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from notetaker.transcription.models import TranscriptResult
+from ownscribe.transcription.models import TranscriptResult
 
 
 def _format_time(seconds: float) -> str:

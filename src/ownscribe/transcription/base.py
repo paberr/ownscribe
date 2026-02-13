@@ -5,7 +5,7 @@ from __future__ import annotations
 import abc
 from pathlib import Path
 
-from notetaker.transcription.models import TranscriptResult
+from ownscribe.transcription.models import TranscriptResult
 
 
 class Transcriber(abc.ABC):

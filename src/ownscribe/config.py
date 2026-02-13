@@ -7,7 +7,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CONFIG_DIR = Path("~/.config/notetaker").expanduser()
+CONFIG_DIR = Path("~/.config/ownscribe").expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
 DEFAULT_CONFIG_TOML = """\
@@ -34,7 +34,7 @@ model = "mistral"         # model name
 host = "http://localhost:11434"  # ollama: :11434, LM Studio: :1234
 
 [output]
-dir = "~/notetaker"       # base output directory
+dir = "~/ownscribe"       # base output directory
 format = "markdown"       # "markdown" or "json"
 """
 
@@ -71,7 +71,7 @@ class SummarizationConfig:
 
 @dataclass
 class OutputConfig:
-    dir: str = "~/notetaker"
+    dir: str = "~/ownscribe"
     format: str = "markdown"
 
     @property
