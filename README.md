@@ -1,7 +1,27 @@
 # ownscribe
 
+[![PyPI](https://img.shields.io/pypi/v/ownscribe)](https://pypi.org/project/ownscribe/)
+[![CI](https://github.com/paberr/ownscribe/actions/workflows/ci.yml/badge.svg)](https://github.com/paberr/ownscribe/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+
 Local-first meeting transcription and summarization CLI.
 Record, transcribe, and summarize meetings and system audio entirely on your machine – no cloud, no bots, no data leaving your device.
+
+> System audio capture requires **macOS 14.2 or later**. Other platforms can use the sounddevice backend with an external audio source.
+
+## Privacy
+
+ownscribe does not:
+
+- send audio to external servers
+- upload transcripts
+- require cloud APIs
+- store data outside your machine
+
+All audio, transcripts, and summaries remain local.
+
+<!-- TODO: Add asciinema demo or terminal screenshot here -->
 
 ## Features
 
@@ -76,6 +96,7 @@ ownscribe --no-summarize                      # skip LLM summarization
 ownscribe --diarize                           # enable speaker identification
 ownscribe --model large-v3                    # use a larger Whisper model
 ownscribe --format json                       # output as JSON instead of markdown
+ownscribe --no-keep-recording                 # auto-delete WAV files after transcription
 ```
 
 ### Subcommands
@@ -86,6 +107,7 @@ ownscribe apps                     # list running apps with PIDs for use with --
 ownscribe transcribe recording.wav # transcribe an existing audio file
 ownscribe summarize transcript.md  # summarize an existing transcript
 ownscribe config                   # open config file in $EDITOR
+ownscribe cleanup                  # remove ownscribe data from disk
 ```
 
 ## Configuration
@@ -116,6 +138,7 @@ host = "http://localhost:11434"
 [output]
 dir = "~/ownscribe"
 format = "markdown"       # "markdown" or "json"
+keep_recording = true     # false = auto-delete WAV after transcription
 ```
 
 **Precedence:** CLI flags > environment variables (`HF_TOKEN`, `OLLAMA_HOST`) > config file > defaults.
