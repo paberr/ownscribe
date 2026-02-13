@@ -55,6 +55,14 @@ class TestMainCommand:
             config = mock_run.call_args[0][0]
             assert config.transcription.model == "large-v3"
 
+    def test_language_flag(self):
+        runner = CliRunner()
+        with _mock_config(), mock.patch("ownscribe.pipeline.run_pipeline") as mock_run:
+            result = runner.invoke(cli, ["--language", "de"])
+            assert result.exit_code == 0
+            config = mock_run.call_args[0][0]
+            assert config.transcription.language == "de"
+
 
 class TestSubcommandHelp:
     def test_transcribe_help(self):

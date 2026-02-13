@@ -36,6 +36,7 @@ def _dir_size(path: str) -> str:
 @click.option("--diarize", is_flag=True, help="Enable speaker diarization (needs HF token).")
 @click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default=None, help="Output format.")
 @click.option("--model", default=None, help="Whisper model size (tiny, base, small, medium, large-v3).")
+@click.option("--language", default=None, help="Language code for transcription (e.g. en, de, fr).")
 @click.option("--mic", is_flag=True, help="Also capture microphone input (mixed with system audio).")
 @click.option("--mic-device", default=None, help="Specific mic device name (implies --mic).")
 @click.option(
@@ -51,6 +52,7 @@ def cli(
     diarize: bool,
     output_format: str | None,
     model: str | None,
+    language: str | None,
     mic: bool,
     mic_device: str | None,
     keep_recording: bool | None,
@@ -75,6 +77,8 @@ def cli(
         config.output.format = output_format
     if model:
         config.transcription.model = model
+    if language:
+        config.transcription.language = language
     if mic or mic_device:
         config.audio.mic = True
     if mic_device:
@@ -106,15 +110,21 @@ def devices() -> None:
 @click.argument("file", type=click.Path(exists=True))
 @click.option("--diarize", is_flag=True, help="Enable speaker diarization.")
 @click.option("--model", default=None, help="Whisper model size.")
+@click.option("--language", default=None, help="Language code for transcription (e.g. en, de, fr).")
 @click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default=None)
 @click.pass_context
-def transcribe(ctx: click.Context, file: str, diarize: bool, model: str | None, output_format: str | None) -> None:
+def transcribe(
+    ctx: click.Context, file: str, diarize: bool,
+    model: str | None, language: str | None, output_format: str | None,
+) -> None:
     """Transcribe an audio file."""
     config = ctx.obj["config"]
     if diarize:
         config.diarization.enabled = True
     if model:
         config.transcription.model = model
+    if language:
+        config.transcription.language = language
     if output_format:
         config.output.format = output_format
 
