@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -14,9 +16,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build Swift binary
         run: bash swift/build.sh
+      - name: Rename binary
+        run: mv bin/ownscribe-audio bin/ownscribe-audio-arm64
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: bin/ownscribe-audio-arm64
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mv bin/ownscribe-audio bin/ownscribe-audio-arm64
-          gh release upload "${{ github.event.release.tag_name }}" bin/ownscribe-audio-arm64
+        run: gh release upload "${{ github.event.release.tag_name }}" bin/ownscribe-audio-arm64
