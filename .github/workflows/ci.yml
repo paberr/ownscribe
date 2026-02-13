@@ -22,5 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - name: Build Swift helper
+        run: bash swift/build.sh
       - run: uv sync --dev
       - run: uv run pytest -v -m "not hardware"

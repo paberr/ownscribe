@@ -41,13 +41,13 @@ This project uses [ruff](https://docs.astral.sh/ruff/) for linting. Run `uv run 
 Here are some areas where contributions would be especially welcome:
 
 ### Linux/Windows audio capture backends
-Currently, system audio capture only works on macOS via Core Audio Taps. Adding support for PulseAudio/PipeWire (Linux) or WASAPI (Windows) would make the tool cross-platform. See `src/ownscribe/audio/base.py` for the recorder interface.
+Currently, system audio capture only works on macOS via Core Audio Taps. Adding support for PulseAudio/PipeWire (Linux) or WASAPI (Windows) would make the tool cross-platform. See `src/ownscribe/audio/base.py` for the recorder interface. A two-device mode for SoundDeviceRecorder (separate system audio + mic streams) would also bring mic mute toggle support to non-macOS platforms.
 
 ### GUI frontend
 Build a desktop GUI (Electron, Tauri, or native) that wraps the CLI. Could show a recording indicator, live transcript preview, and summary output.
 
 ### Integration with meeting tools
-A big difference to cloud-based apps is that those usually connect to meetings directly and capture the audio through that. This way, if your microphone is muted, it's not recorded. If you use ownscribe with `--mic` it still records your microphone while being muted in a meeting.
+A big difference to cloud-based apps is that those usually connect to meetings directly and capture the audio through that. This way, if your microphone is muted, it's not recorded. With the mic mute toggle (press `m` during recording), you can now mute/unmute the mic stream without stopping the recording. Further integration ideas include detecting the meeting app's mute state automatically.
 
 ### Speaker name assignment
 Currently, diarization produces anonymous labels (`SPEAKER_00`, `SPEAKER_01`). Allow users to map these to real names, either interactively after transcription or via a pre-configured mapping.

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import select
 import signal
+import sys
+import termios
 import time
+import tty
 from datetime import datetime
 from pathlib import Path
 
@@ -105,7 +109,16 @@ def run_pipeline(config: Config) -> None:
 
     # 1. Record
     recorder = _create_recorder(config)
-    click.echo("Starting recording... Press Ctrl+C to stop.\n")
+
+    from ownscribe.audio.coreaudio import CoreAudioRecorder
+
+    can_mute = isinstance(recorder, CoreAudioRecorder) and config.audio.mic
+    is_tty = sys.stdin.isatty()
+
+    hint = " Press Ctrl+C to stop."
+    if can_mute and is_tty:
+        hint = " Press 'm' to mute/unmute mic, Ctrl+C to stop."
+    click.echo(f"Starting recording...{hint}\n")
     recorder.start(audio_path)
 
     start_time = time.time()
@@ -118,12 +131,21 @@ def run_pipeline(config: Config) -> None:
     original_handler = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, on_interrupt)
 
+    old_termios = None
+    if can_mute and is_tty:
+        old_termios = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
+
     warned_no_data = False
     try:
         while not stop_event:
             elapsed = time.time() - start_time
             mins, secs = divmod(int(elapsed), 60)
-            click.echo(f"\r  Recording: {mins:02d}:{secs:02d}", nl=False)
+            mute_indicator = "  [MIC MUTED]" if recorder.is_muted else ""
+            click.echo(
+                f"\r  Recording: {mins:02d}:{secs:02d}{mute_indicator}\033[K",
+                nl=False,
+            )
             if (
                 not warned_no_data
                 and elapsed >= 3
@@ -135,8 +157,19 @@ def run_pipeline(config: Config) -> None:
                     err=True,
                 )
                 warned_no_data = True
-            time.sleep(0.5)
+            if old_termios is not None:
+                readable, _, _ = select.select([sys.stdin], [], [], 0.5)
+                if readable:
+                    ch = sys.stdin.read(1)
+                    if ch in ("m", "M"):
+                        recorder.toggle_mute()
+                    elif ch == "\x03":
+                        stop_event = True
+            else:
+                time.sleep(0.5)
     finally:
+        if old_termios is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_termios)
         signal.signal(signal.SIGINT, original_handler)
 
     click.echo("\n\nStopping recording...")

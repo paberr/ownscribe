@@ -20,3 +20,11 @@ class AudioRecorder(abc.ABC):
     @abc.abstractmethod
     def is_available(self) -> bool:
         """Check if this backend is available on the current system."""
+
+    def toggle_mute(self) -> None:  # noqa: B027
+        """Toggle microphone mute. No-op for backends that don't support it."""
+
+    @property
+    def is_muted(self) -> bool:
+        """Whether the microphone is currently muted."""
+        return False

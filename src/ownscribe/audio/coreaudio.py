@@ -78,6 +78,7 @@ class CoreAudioRecorder(AudioRecorder):
         self._process: subprocess.Popen | None = None
         self._binary = _find_binary()
         self._silence_warning: bool = False
+        self._muted: bool = False
 
     def is_available(self) -> bool:
         return self._binary is not None
@@ -104,6 +105,16 @@ class CoreAudioRecorder(AudioRecorder):
         """True if the Swift helper reported a silence warning."""
         return self._silence_warning
 
+    def toggle_mute(self) -> None:
+        """Send SIGUSR1 to the Swift helper to toggle mic mute."""
+        if self._mic and self._process and self._process.poll() is None:
+            self._process.send_signal(signal.SIGUSR1)
+            self._muted = not self._muted
+
+    @property
+    def is_muted(self) -> bool:
+        return self._muted
+
     def stop(self) -> None:
         if self._process and self._process.poll() is None:
             self._process.send_signal(signal.SIGINT)
@@ -117,7 +128,13 @@ class CoreAudioRecorder(AudioRecorder):
             if stderr_output:
                 if "[SILENCE_WARNING]" in stderr_output:
                     self._silence_warning = True
-                click.echo(stderr_output.strip(), err=True)
+                # Filter out mute toggle lines (state is tracked in Python)
+                lines = [
+                    line for line in stderr_output.strip().splitlines()
+                    if line not in ("[MIC_MUTED]", "[MIC_UNMUTED]")
+                ]
+                if lines:
+                    click.echo("\n".join(lines), err=True)
 
     def list_devices(self) -> str:
         """List available audio devices using the Swift helper."""

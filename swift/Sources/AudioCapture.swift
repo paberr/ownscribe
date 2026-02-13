@@ -14,6 +14,24 @@ class MicCapture {
     private var audioFile: AVAudioFile?
     private(set) var startHostTime: UInt64 = 0
 
+    // Mute support — guarded by os_unfair_lock (tap callback is on AVAudioEngine thread)
+    private var _isMuted = false
+    private var _muteLock = os_unfair_lock_s()
+
+    var isMuted: Bool {
+        os_unfair_lock_lock(&_muteLock)
+        defer { os_unfair_lock_unlock(&_muteLock) }
+        return _isMuted
+    }
+
+    func toggleMute() {
+        os_unfair_lock_lock(&_muteLock)
+        _isMuted.toggle()
+        let muted = _isMuted
+        os_unfair_lock_unlock(&_muteLock)
+        fputs(muted ? "[MIC_MUTED]\n" : "[MIC_UNMUTED]\n", stderr)
+    }
+
     func start(outputPath: String, deviceName: String?) throws {
         let input = engine.inputNode
 
@@ -46,6 +64,13 @@ class MicCapture {
             guard let self else { return }
             if self.startHostTime == 0 {
                 self.startHostTime = time.hostTime
+            }
+            if self.isMuted, let channelData = buffer.floatChannelData {
+                let channels = Int(buffer.format.channelCount)
+                let frames = Int(buffer.frameLength)
+                for ch in 0..<channels {
+                    memset(channelData[ch], 0, frames * MemoryLayout<Float>.size)
+                }
             }
             try? self.audioFile?.write(from: buffer)
         }
@@ -655,6 +680,17 @@ func main() {
             }
             micCapture = mic
         }
+
+        // Toggle mic mute on SIGUSR1 (sent by Python wrapper)
+        var _sigusr1Source: DispatchSourceSignal?  // retained to keep source alive
+        if let mic = micCapture {
+            signal(SIGUSR1, SIG_IGN)
+            let src = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+            src.setEventHandler { mic.toggleMute() }
+            src.resume()
+            _sigusr1Source = src
+        }
+        _ = _sigusr1Source
 
         // Handle Ctrl+C gracefully
         let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)

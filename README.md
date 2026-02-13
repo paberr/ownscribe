@@ -89,7 +89,7 @@ This will:
 ### Options
 
 ```bash
-ownscribe --mic                               # capture system audio + default mic
+ownscribe --mic                               # capture system audio + default mic (press 'm' to mute/unmute)
 ownscribe --mic-device "MacBook Pro Microphone" # capture system audio + specific mic
 ownscribe --device "MacBook Pro Microphone"   # use mic instead of system audio
 ownscribe --no-summarize                      # skip LLM summarization
@@ -163,6 +163,10 @@ ownscribe builds on some excellent open-source projects:
 - [pyannote.audio](https://github.com/pyannote/pyannote-audio) — speaker diarization
 - [Ollama](https://ollama.ai) — local LLM serving
 - [Click](https://click.palletsprojects.com) — CLI framework
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, tests, and open contribution areas.
 
 ## License
 
