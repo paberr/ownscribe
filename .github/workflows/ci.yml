@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --dev --no-install-project
+      - run: uv sync --only-group dev
       - run: uv run ruff check src/ tests/
 
   test:
