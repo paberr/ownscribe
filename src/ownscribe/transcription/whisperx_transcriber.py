@@ -163,6 +163,14 @@ class WhisperXTranscriber(Transcriber):
         duration = audio.shape[0] / float(_SAMPLE_RATE)
         return TranscriptResult(segments=segments, language=language, duration=duration)
 
+    @staticmethod
+    def _resolve_diarization_device(device_cfg: str) -> str:
+        if device_cfg == "auto":
+            import torch
+
+            return "mps" if torch.backends.mps.is_available() else "cpu"
+        return device_cfg
+
     def _diarize(self, audio, result, devnull):
         import pandas as pd
         import torch
@@ -172,10 +180,12 @@ class WhisperXTranscriber(Transcriber):
         progress = self._progress
         progress.begin("diarizing")
 
+        device = self._resolve_diarization_device(self._diar_config.device)
+
         # Load the diarization pipeline (model loading happens inside)
         with contextlib.redirect_stderr(devnull):
             diarize_model = DiarizationPipeline(
-                use_auth_token=self._diar_config.hf_token, device="cpu"
+                use_auth_token=self._diar_config.hf_token, device=device
             )
 
         # Build audio_data dict the same way whisperx does internally

@@ -132,6 +132,7 @@ language = ""             # empty = auto-detect
 enabled = false
 hf_token = ""             # HuggingFace token for pyannote
 telemetry = false         # allow HuggingFace Hub + pyannote metrics telemetry
+device = "auto"           # "auto" (mps if available), "mps", or "cpu"
 
 [summarization]
 enabled = true
@@ -159,6 +160,8 @@ Speaker identification requires a HuggingFace token with access to the pyannote 
 2. Create a token at https://huggingface.co/settings/tokens
 3. Set `HF_TOKEN` env var or add `hf_token` to config
 4. Run with `--diarize`
+
+On Apple Silicon Macs, diarization automatically uses the Metal Performance Shaders (MPS) GPU backend for ~10x faster processing. Set `device = "cpu"` in the `[diarization]` config section to disable this.
 
 ## Acknowledgments
 
