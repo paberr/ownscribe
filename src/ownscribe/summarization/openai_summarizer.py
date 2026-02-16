@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import click
 import openai
 
 from ownscribe.config import SummarizationConfig
 from ownscribe.summarization.base import Summarizer
-from ownscribe.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM, clean_response
+from ownscribe.summarization.prompts import clean_response, get_system_prompt, get_user_prompt
 
 
 class OpenAISummarizer(Summarizer):
@@ -29,14 +28,14 @@ class OpenAISummarizer(Summarizer):
             return False
 
     def summarize(self, transcript_text: str) -> str:
-        prompt = MEETING_SUMMARY_PROMPT.format(transcript=transcript_text)
-        click.echo(f"Summarizing with {self._config.model}...")
+        system = get_system_prompt(self._config.system_prompt)
+        user = get_user_prompt(self._config.prompt).format(transcript=transcript_text)
 
         response = self._client.chat.completions.create(
             model=self._config.model,
             messages=[
-                {"role": "system", "content": MEETING_SUMMARY_SYSTEM},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
             ],
         )
         return clean_response(response.choices[0].message.content or "")

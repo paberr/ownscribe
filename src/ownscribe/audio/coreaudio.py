@@ -128,10 +128,12 @@ class CoreAudioRecorder(AudioRecorder):
             if stderr_output:
                 if "[SILENCE_WARNING]" in stderr_output:
                     self._silence_warning = True
-                # Filter out mute toggle lines (state is tracked in Python)
+                # Filter out mute toggles and known informational lines
+                _NOISE_PREFIXES = ("Recording ", "Saved ", "Merged audio saved")
                 lines = [
                     line for line in stderr_output.strip().splitlines()
                     if line not in ("[MIC_MUTED]", "[MIC_UNMUTED]")
+                    and not line.startswith(_NOISE_PREFIXES)
                 ]
                 if lines:
                     click.echo("\n".join(lines), err=True)

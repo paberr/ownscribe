@@ -14,6 +14,7 @@ from pathlib import Path
 import click
 
 from ownscribe.config import Config
+from ownscribe.progress import PipelineProgress, Spinner
 
 
 def _check_audio_silence(audio_path: Path) -> None:
@@ -72,12 +73,12 @@ def _create_recorder(config: Config):
     return SoundDeviceRecorder(device=device)
 
 
-def _create_transcriber(config: Config):
+def _create_transcriber(config: Config, progress=None):
     """Create the WhisperX transcriber."""
     from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
 
     diar_config = config.diarization if config.diarization.enabled else None
-    return WhisperXTranscriber(config.transcription, diar_config)
+    return WhisperXTranscriber(config.transcription, diar_config, progress=progress)
 
 
 def _create_summarizer(config: Config):
@@ -185,7 +186,9 @@ def run_pipeline(config: Config) -> None:
     click.echo(f"Audio saved to {audio_path}\n")
 
     # Check for silent audio before spending time on transcription
-    _check_audio_silence(audio_path)
+    # Skip if the recorder already reported a silence warning (CoreAudio helper)
+    if not getattr(recorder, "silence_warning", False):
+        _check_audio_silence(audio_path)
 
     # 2. Transcribe
     _do_transcribe_and_summarize(config, audio_path, out_dir)
@@ -212,7 +215,8 @@ def run_summarize(config: Config, transcript_file: str) -> None:
         )
         raise SystemExit(1)
 
-    summary = summarizer.summarize(transcript_text)
+    with Spinner(f"Summarizing with {config.summarization.model}"):
+        summary = summarizer.summarize(transcript_text)
 
     from ownscribe.output.markdown import format_summary
 
@@ -232,17 +236,37 @@ def _do_transcribe_and_summarize(
     summarize: bool = True,
 ) -> None:
     """Shared logic for transcribe + optional summarize."""
-    try:
-        transcriber = _create_transcriber(config)
-    except ImportError:
-        click.echo(
-            "Error: WhisperX is not installed. Install with:\n"
-            "  uv pip install 'ownscribe[transcription]'",
-            err=True,
-        )
-        raise SystemExit(1) from None
+    diar_enabled = config.diarization.enabled and bool(config.diarization.hf_token)
+    sum_enabled = summarize and config.summarization.enabled
 
-    result = transcriber.transcribe(audio_path)
+    summary = None
+    with PipelineProgress(diarize=diar_enabled, summarize=sum_enabled) as progress:
+        try:
+            transcriber = _create_transcriber(config, progress=progress)
+        except ImportError:
+            click.echo(
+                "Error: WhisperX is not installed. Install with:\n"
+                "  uv pip install 'ownscribe[transcription]'",
+                err=True,
+            )
+            raise SystemExit(1) from None
+
+        result = transcriber.transcribe(audio_path)
+
+        # 3. Summarize
+        if sum_enabled:
+            summarizer = _create_summarizer(config)
+            if not summarizer.is_available():
+                click.echo(
+                    f"\nWarning: {config.summarization.backend} is not reachable "
+                    f"at {config.summarization.host}. "
+                    "Skipping summarization. Is the server running?",
+                    err=True,
+                )
+            else:
+                progress.begin("summarizing")
+                summary = summarizer.summarize(result.full_text)
+                progress.complete("summarizing")
 
     transcript_str, _ = _format_output(config, result)
 
@@ -251,18 +275,7 @@ def _do_transcribe_and_summarize(
     transcript_path.write_text(transcript_str)
     click.echo(f"Transcript saved to {transcript_path}")
 
-    # 3. Summarize
-    if summarize and config.summarization.enabled:
-        summarizer = _create_summarizer(config)
-        if not summarizer.is_available():
-            click.echo(
-                f"\nWarning: {config.summarization.backend} is not reachable at {config.summarization.host}. "
-                "Skipping summarization. Is the server running?",
-                err=True,
-            )
-            return
-
-        summary = summarizer.summarize(result.full_text)
+    if summary is not None:
         _, summary_str = _format_output(config, result, summary)
 
         summary_path = out_dir / f"summary.{ext}"

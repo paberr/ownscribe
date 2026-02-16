@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import click
 import ollama
 
 from ownscribe.config import SummarizationConfig
 from ownscribe.summarization.base import Summarizer
-from ownscribe.summarization.prompts import MEETING_SUMMARY_PROMPT, MEETING_SUMMARY_SYSTEM, clean_response
+from ownscribe.summarization.prompts import clean_response, get_system_prompt, get_user_prompt
 
 
 class OllamaSummarizer(Summarizer):
@@ -25,14 +24,14 @@ class OllamaSummarizer(Summarizer):
             return False
 
     def summarize(self, transcript_text: str) -> str:
-        prompt = MEETING_SUMMARY_PROMPT.format(transcript=transcript_text)
-        click.echo(f"Summarizing with {self._config.model}...")
+        system = get_system_prompt(self._config.system_prompt)
+        user = get_user_prompt(self._config.prompt).format(transcript=transcript_text)
 
         response = self._client.chat(
             model=self._config.model,
             messages=[
-                {"role": "system", "content": MEETING_SUMMARY_SYSTEM},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
             ],
         )
         return clean_response(response["message"]["content"])

@@ -32,6 +32,77 @@ class TestCleanResponse:
         assert clean_response(raw) == "## Summary\nActual content"
 
 
+class TestOllamaCustomPrompts:
+    """Test that custom prompts are passed through to Ollama."""
+
+    def test_custom_system_and_user_prompt(self, httpserver):
+        import json
+
+        response_body = {
+            "message": {"role": "assistant", "content": "Custom summary."},
+            "done": True,
+        }
+        httpserver.expect_request("/api/chat", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(
+            host=httpserver.url_for(""),
+            backend="ollama",
+            model="test-model",
+            system_prompt="You are a pirate.",
+            prompt="Arr! Summarize: {transcript}",
+        )
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        summarizer.summarize("Alice: Hello")
+
+        # Check what was sent to the server
+        request = httpserver.log[0][0]
+        body = json.loads(request.data)
+        assert body["messages"][0]["content"] == "You are a pirate."
+        assert body["messages"][1]["content"] == "Arr! Summarize: Alice: Hello"
+
+
+class TestOpenAICustomPrompts:
+    """Test that custom prompts are passed through to OpenAI."""
+
+    def test_custom_system_and_user_prompt(self, httpserver):
+        import json
+
+        response_body = {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Custom summary."},
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "test-model",
+        }
+        httpserver.expect_request("/v1/chat/completions", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(
+            host=httpserver.url_for(""),
+            backend="openai",
+            model="test-model",
+            system_prompt="You are a pirate.",
+            prompt="Arr! Summarize: {transcript}",
+        )
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        summarizer.summarize("Alice: Hello")
+
+        request = httpserver.log[0][0]
+        body = json.loads(request.data)
+        assert body["messages"][0]["content"] == "You are a pirate."
+        assert body["messages"][1]["content"] == "Arr! Summarize: Alice: Hello"
+
+
 class TestOllamaSummarizer:
     """Test OllamaSummarizer against a mock HTTP server."""
 

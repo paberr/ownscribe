@@ -32,6 +32,16 @@ class TestDefaults:
         assert cfg.audio.mic_device == ""
 
 
+    def test_default_diarization_telemetry_off(self):
+        cfg = Config()
+        assert cfg.diarization.telemetry is False
+
+    def test_default_summarization_custom_prompts_empty(self):
+        cfg = Config()
+        assert cfg.summarization.system_prompt == ""
+        assert cfg.summarization.prompt == ""
+
+
 class TestMergeToml:
     def test_full_override(self):
         cfg = Config()
@@ -60,6 +70,24 @@ class TestMergeToml:
         merged = _merge_toml(cfg, data)
         assert merged.audio.mic is True
         assert merged.audio.mic_device == "MacBook Pro Microphone"
+
+    def test_diarization_telemetry_from_toml(self):
+        cfg = Config()
+        data = {"diarization": {"telemetry": True}}
+        merged = _merge_toml(cfg, data)
+        assert merged.diarization.telemetry is True
+
+    def test_custom_prompts_from_toml(self):
+        cfg = Config()
+        data = {
+            "summarization": {
+                "system_prompt": "You are a custom bot.",
+                "prompt": "Custom: {transcript}",
+            }
+        }
+        merged = _merge_toml(cfg, data)
+        assert merged.summarization.system_prompt == "You are a custom bot."
+        assert merged.summarization.prompt == "Custom: {transcript}"
 
     def test_unknown_keys_ignored(self):
         cfg = Config()

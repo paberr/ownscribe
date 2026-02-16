@@ -26,12 +26,15 @@ enabled = false           # set to true + provide hf_token to enable
 hf_token = ""             # HuggingFace token for pyannote models
 min_speakers = 0          # 0 = auto-detect
 max_speakers = 0
+telemetry = false         # set to true to allow HuggingFace Hub telemetry
 
 [summarization]
 enabled = true
 backend = "ollama"        # "ollama" or "openai" (for LM Studio, llama.cpp server, etc.)
 model = "mistral"         # model name
 host = "http://localhost:11434"  # ollama: :11434, LM Studio: :1234
+# system_prompt = "You are a meeting notes assistant."  # custom system prompt (empty = built-in default)
+# prompt = "Summarize: {transcript}"                    # custom user prompt; must contain {transcript}
 
 [output]
 dir = "~/ownscribe"       # base output directory
@@ -60,6 +63,7 @@ class DiarizationConfig:
     hf_token: str = ""
     min_speakers: int = 0
     max_speakers: int = 0
+    telemetry: bool = False
 
 
 @dataclass
@@ -68,6 +72,8 @@ class SummarizationConfig:
     backend: str = "ollama"
     model: str = "mistral"
     host: str = "http://localhost:11434"
+    system_prompt: str = ""
+    prompt: str = ""
 
 
 @dataclass

@@ -36,3 +36,13 @@ Bullet points of any explicit decisions that were made.
 
 Transcript:
 {transcript}"""
+
+
+def get_system_prompt(custom: str) -> str:
+    """Return *custom* if non-empty, otherwise the built-in system prompt."""
+    return custom if custom else MEETING_SUMMARY_SYSTEM
+
+
+def get_user_prompt(custom: str) -> str:
+    """Return *custom* if non-empty, otherwise the built-in user prompt."""
+    return custom if custom else MEETING_SUMMARY_PROMPT
