@@ -26,7 +26,7 @@ enabled = false           # set to true + provide hf_token to enable
 hf_token = ""             # HuggingFace token for pyannote models
 min_speakers = 0          # 0 = auto-detect
 max_speakers = 0
-telemetry = false         # set to true to allow HuggingFace Hub telemetry
+telemetry = false         # set to true to allow HuggingFace Hub + pyannote metrics telemetry
 
 [summarization]
 enabled = true

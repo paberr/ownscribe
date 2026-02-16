@@ -29,7 +29,9 @@ All audio, transcripts, and summaries remain local.
 - **Microphone capture** — optionally record system + mic audio simultaneously with `--mic`
 - **WhisperX transcription** — fast, accurate speech-to-text with word-level timestamps
 - **Speaker diarization** — optional speaker identification via pyannote (requires HuggingFace token)
+- **Pipeline progress** — live checklist showing transcription, diarization sub-steps, and summarization progress
 - **Local LLM summarization** — structured meeting notes via Ollama, LM Studio, or any OpenAI-compatible server
+- **Custom prompts** — override the built-in summarization system and user prompts in config
 - **One command** — just run `ownscribe`, press Ctrl+C when done, get transcript + summary
 
 ## Requirements
@@ -94,6 +96,7 @@ ownscribe --mic-device "MacBook Pro Microphone" # capture system audio + specifi
 ownscribe --device "MacBook Pro Microphone"   # use mic instead of system audio
 ownscribe --no-summarize                      # skip LLM summarization
 ownscribe --diarize                           # enable speaker identification
+ownscribe --language en                        # set transcription language (default: auto-detect)
 ownscribe --model large-v3                    # use a larger Whisper model
 ownscribe --format json                       # output as JSON instead of markdown
 ownscribe --no-keep-recording                 # auto-delete WAV files after transcription
@@ -128,12 +131,15 @@ language = ""             # empty = auto-detect
 [diarization]
 enabled = false
 hf_token = ""             # HuggingFace token for pyannote
+telemetry = false         # allow HuggingFace Hub + pyannote metrics telemetry
 
 [summarization]
 enabled = true
 backend = "ollama"        # "ollama" or "openai"
 model = "mistral"
 host = "http://localhost:11434"
+system_prompt = ""        # custom system prompt (empty = built-in default)
+prompt = ""               # custom user prompt; must contain {transcript}
 
 [output]
 dir = "~/ownscribe"

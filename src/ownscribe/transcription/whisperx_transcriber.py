@@ -49,6 +49,7 @@ class WhisperXTranscriber(Transcriber):
         os.environ.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
         if self._diar_config is None or not self._diar_config.telemetry:
             os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+            os.environ.setdefault("PYANNOTE_METRICS_ENABLED", "0")
 
         hf_token_warning: str | None = None
         if (
