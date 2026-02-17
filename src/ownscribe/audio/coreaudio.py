@@ -119,10 +119,14 @@ class CoreAudioRecorder(AudioRecorder):
         if self._process and self._process.poll() is None:
             self._process.send_signal(signal.SIGINT)
             try:
-                self._process.wait(timeout=5)
+                self._process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self._process.terminate()
-                self._process.wait(timeout=5)
+                try:
+                    self._process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._process.kill()
+                    self._process.wait(timeout=5)
         if self._process and self._process.stderr:
             stderr_output = self._process.stderr.read().decode(errors="replace")
             if stderr_output:
