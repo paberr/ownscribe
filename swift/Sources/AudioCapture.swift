@@ -435,13 +435,12 @@ func listInputDevices() {
 
 // MARK: - Merge audio files with timestamp alignment
 
-/// A standard WAV file header (RIFF + fmt + data chunk header) is 44 bytes.
-/// Files at or below this size contain no audio frames.
-let wavHeaderSize = 44
-
 func mergeAudioFiles(systemPath: String, micPath: String,
                      systemStartHostTime: UInt64, micStartHostTime: UInt64,
                      outputPath: String) throws {
+    // A standard WAV file header (RIFF + fmt + data chunk header) is 44 bytes.
+    // Files at or below this size contain no audio frames.
+    let wavHeaderSize = 44
     let fm = FileManager.default
     let systemFileSize = (try? fm.attributesOfItem(atPath: systemPath)[.size] as? Int) ?? 0
     let micFileSize = (try? fm.attributesOfItem(atPath: micPath)[.size] as? Int) ?? 0
