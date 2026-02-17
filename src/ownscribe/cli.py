@@ -44,6 +44,7 @@ def _dir_size(path: str) -> str:
     default=None,
     help="Keep or delete WAV recordings after transcription.",
 )
+@click.option("--template", default=None, help="Summarization template (meeting, lecture, brief, or custom).")
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -56,6 +57,7 @@ def cli(
     mic: bool,
     mic_device: str | None,
     keep_recording: bool | None,
+    template: str | None,
 ) -> None:
     """Fully local meeting transcription and summarization.
 
@@ -85,6 +87,8 @@ def cli(
         config.audio.mic_device = mic_device
     if keep_recording is not None:
         config.output.keep_recording = keep_recording
+    if template:
+        config.summarization.template = template
 
     ctx.obj["config"] = config
 
@@ -134,10 +138,13 @@ def transcribe(
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
+@click.option("--template", default=None, help="Summarization template (meeting, lecture, brief, or custom).")
 @click.pass_context
-def summarize(ctx: click.Context, file: str) -> None:
+def summarize(ctx: click.Context, file: str, template: str | None) -> None:
     """Summarize a transcript file."""
     config = ctx.obj["config"]
+    if template:
+        config.summarization.template = template
 
     from ownscribe.pipeline import run_summarize
     run_summarize(config, file)

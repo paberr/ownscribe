@@ -41,10 +41,13 @@ class TestDefaults:
         cfg = Config()
         assert cfg.diarization.device == "auto"
 
-    def test_default_summarization_custom_prompts_empty(self):
+    def test_default_summarization_template_empty(self):
         cfg = Config()
-        assert cfg.summarization.system_prompt == ""
-        assert cfg.summarization.prompt == ""
+        assert cfg.summarization.template == ""
+
+    def test_default_templates_empty(self):
+        cfg = Config()
+        assert cfg.templates == {}
 
 
 class TestMergeToml:
@@ -82,17 +85,37 @@ class TestMergeToml:
         merged = _merge_toml(cfg, data)
         assert merged.diarization.telemetry is True
 
-    def test_custom_prompts_from_toml(self):
+    def test_template_from_toml(self):
+        cfg = Config()
+        data = {"summarization": {"template": "lecture"}}
+        merged = _merge_toml(cfg, data)
+        assert merged.summarization.template == "lecture"
+
+    def test_user_templates_from_toml(self):
         cfg = Config()
         data = {
-            "summarization": {
-                "system_prompt": "You are a custom bot.",
-                "prompt": "Custom: {transcript}",
+            "templates": {
+                "my-notes": {
+                    "system_prompt": "You are a custom bot.",
+                    "prompt": "Custom: {transcript}",
+                }
             }
         }
         merged = _merge_toml(cfg, data)
-        assert merged.summarization.system_prompt == "You are a custom bot."
-        assert merged.summarization.prompt == "Custom: {transcript}"
+        assert "my-notes" in merged.templates
+        assert merged.templates["my-notes"].system_prompt == "You are a custom bot."
+        assert merged.templates["my-notes"].prompt == "Custom: {transcript}"
+
+    def test_user_templates_partial(self):
+        cfg = Config()
+        data = {
+            "templates": {
+                "quick": {"prompt": "Summarize briefly: {transcript}"}
+            }
+        }
+        merged = _merge_toml(cfg, data)
+        assert merged.templates["quick"].system_prompt == ""
+        assert merged.templates["quick"].prompt == "Summarize briefly: {transcript}"
 
     def test_unknown_keys_ignored(self):
         cfg = Config()

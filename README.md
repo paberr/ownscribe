@@ -31,7 +31,7 @@ All audio, transcripts, and summaries remain local.
 - **Speaker diarization** — optional speaker identification via pyannote (requires HuggingFace token)
 - **Pipeline progress** — live checklist showing transcription, diarization sub-steps, and summarization progress
 - **Local LLM summarization** — structured meeting notes via Ollama, LM Studio, or any OpenAI-compatible server
-- **Custom prompts** — override the built-in summarization system and user prompts in config
+- **Summarization templates** — built-in presets for meetings, lectures, and quick briefs; define your own in config
 - **One command** — just run `ownscribe`, press Ctrl+C when done, get transcript + summary
 
 ## Requirements
@@ -108,6 +108,7 @@ ownscribe --language en                        # set transcription language (def
 ownscribe --model large-v3                    # use a larger Whisper model
 ownscribe --format json                       # output as JSON instead of markdown
 ownscribe --no-keep-recording                 # auto-delete WAV files after transcription
+ownscribe --template lecture                  # use the lecture summarization template
 ```
 
 ### Subcommands
@@ -147,8 +148,12 @@ enabled = true
 backend = "ollama"        # "ollama" or "openai"
 model = "mistral"
 host = "http://localhost:11434"
-system_prompt = ""        # custom system prompt (empty = built-in default)
-prompt = ""               # custom user prompt; must contain {transcript}
+# template = "meeting"    # "meeting", "lecture", "brief", or a custom name
+
+# Custom templates (optional):
+# [templates.my-standup]
+# system_prompt = "You summarize daily standups."
+# prompt = "List each person's update:\n{transcript}"
 
 [output]
 dir = "~/ownscribe"
@@ -157,6 +162,28 @@ keep_recording = true     # false = auto-delete WAV after transcription
 ```
 
 **Precedence:** CLI flags > environment variables (`HF_TOKEN`, `OLLAMA_HOST`) > config file > defaults.
+
+## Summarization Templates
+
+Built-in templates control how transcripts are summarized:
+
+| Template | Best for | Output style |
+|----------|----------|-------------|
+| `meeting` | Meetings, standups, 1:1s | Summary, Key Points, Action Items, Decisions |
+| `lecture` | Lectures, seminars, talks | Summary, Key Concepts, Key Takeaways |
+| `brief` | Quick overviews | 3-5 bullet points |
+
+Use `--template` on the CLI or set `template` in `[summarization]` config. Default is `meeting`.
+
+Define custom templates in config:
+
+```toml
+[templates.my-standup]
+system_prompt = "You summarize daily standups."
+prompt = "List each person's update:\n{transcript}"
+```
+
+Then use with `--template my-standup` or `template = "my-standup"` in config.
 
 ## Speaker Diarization
 

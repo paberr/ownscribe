@@ -6,14 +6,15 @@ import ollama
 
 from ownscribe.config import SummarizationConfig
 from ownscribe.summarization.base import Summarizer
-from ownscribe.summarization.prompts import clean_response, get_system_prompt, get_user_prompt
+from ownscribe.summarization.prompts import clean_response
 
 
 class OllamaSummarizer(Summarizer):
     """Summarizes transcripts using a local Ollama model."""
 
-    def __init__(self, config: SummarizationConfig) -> None:
+    def __init__(self, config: SummarizationConfig, templates: dict | None = None) -> None:
         self._config = config
+        self._templates = templates or {}
         self._client = ollama.Client(host=config.host)
 
     def is_available(self) -> bool:
@@ -24,8 +25,10 @@ class OllamaSummarizer(Summarizer):
             return False
 
     def summarize(self, transcript_text: str) -> str:
-        system = get_system_prompt(self._config.system_prompt)
-        user = get_user_prompt(self._config.prompt).format(transcript=transcript_text)
+        from ownscribe.summarization.prompts import resolve_template
+
+        system, prompt = resolve_template(self._config.template, self._templates)
+        user = prompt.format(transcript=transcript_text)
 
         response = self._client.chat(
             model=self._config.model,

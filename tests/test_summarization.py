@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from ownscribe.config import SummarizationConfig
-from ownscribe.summarization.prompts import clean_response
+from ownscribe.config import SummarizationConfig, TemplateConfig
+from ownscribe.summarization.prompts import (
+    LECTURE_SUMMARY_SYSTEM,
+    clean_response,
+)
 
 
 class TestCleanResponse:
@@ -33,7 +36,7 @@ class TestCleanResponse:
 
 
 class TestOllamaCustomPrompts:
-    """Test that custom prompts are passed through to Ollama."""
+    """Test that custom prompts via user-defined templates are passed through to Ollama."""
 
     def test_custom_system_and_user_prompt(self, httpserver):
         import json
@@ -48,16 +51,20 @@ class TestOllamaCustomPrompts:
             host=httpserver.url_for(""),
             backend="ollama",
             model="test-model",
-            system_prompt="You are a pirate.",
-            prompt="Arr! Summarize: {transcript}",
+            template="pirate",
         )
+        templates = {
+            "pirate": TemplateConfig(
+                system_prompt="You are a pirate.",
+                prompt="Arr! Summarize: {transcript}",
+            ),
+        }
 
         from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
 
-        summarizer = OllamaSummarizer(config)
+        summarizer = OllamaSummarizer(config, templates)
         summarizer.summarize("Alice: Hello")
 
-        # Check what was sent to the server
         request = httpserver.log[0][0]
         body = json.loads(request.data)
         assert body["messages"][0]["content"] == "You are a pirate."
@@ -65,7 +72,7 @@ class TestOllamaCustomPrompts:
 
 
 class TestOpenAICustomPrompts:
-    """Test that custom prompts are passed through to OpenAI."""
+    """Test that custom prompts via user-defined templates are passed through to OpenAI."""
 
     def test_custom_system_and_user_prompt(self, httpserver):
         import json
@@ -88,19 +95,94 @@ class TestOpenAICustomPrompts:
             host=httpserver.url_for(""),
             backend="openai",
             model="test-model",
-            system_prompt="You are a pirate.",
-            prompt="Arr! Summarize: {transcript}",
+            template="pirate",
         )
+        templates = {
+            "pirate": TemplateConfig(
+                system_prompt="You are a pirate.",
+                prompt="Arr! Summarize: {transcript}",
+            ),
+        }
 
         from ownscribe.summarization.openai_summarizer import OpenAISummarizer
 
-        summarizer = OpenAISummarizer(config)
+        summarizer = OpenAISummarizer(config, templates)
         summarizer.summarize("Alice: Hello")
 
         request = httpserver.log[0][0]
         body = json.loads(request.data)
         assert body["messages"][0]["content"] == "You are a pirate."
         assert body["messages"][1]["content"] == "Arr! Summarize: Alice: Hello"
+
+
+class TestOllamaTemplatePassthrough:
+    """Test that built-in templates are resolved correctly by Ollama."""
+
+    def test_lecture_template(self, httpserver):
+        import json
+
+        response_body = {
+            "message": {"role": "assistant", "content": "Lecture notes."},
+            "done": True,
+        }
+        httpserver.expect_request("/api/chat", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(
+            host=httpserver.url_for(""),
+            backend="ollama",
+            model="test-model",
+            template="lecture",
+        )
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        summarizer.summarize("Today we discuss photosynthesis.")
+
+        request = httpserver.log[0][0]
+        body = json.loads(request.data)
+        assert body["messages"][0]["content"] == LECTURE_SUMMARY_SYSTEM
+        assert "Today we discuss photosynthesis." in body["messages"][1]["content"]
+        assert "Key Concepts" in body["messages"][1]["content"]
+
+
+class TestOpenAITemplatePassthrough:
+    """Test that built-in templates are resolved correctly by OpenAI."""
+
+    def test_lecture_template(self, httpserver):
+        import json
+
+        response_body = {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Lecture notes."},
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "test-model",
+        }
+        httpserver.expect_request("/v1/chat/completions", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(
+            host=httpserver.url_for(""),
+            backend="openai",
+            model="test-model",
+            template="lecture",
+        )
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        summarizer.summarize("Today we discuss photosynthesis.")
+
+        request = httpserver.log[0][0]
+        body = json.loads(request.data)
+        assert body["messages"][0]["content"] == LECTURE_SUMMARY_SYSTEM
+        assert "Today we discuss photosynthesis." in body["messages"][1]["content"]
+        assert "Key Concepts" in body["messages"][1]["content"]
 
 
 class TestOllamaGenerateTitle:

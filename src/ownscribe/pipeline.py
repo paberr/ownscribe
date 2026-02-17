@@ -87,10 +87,10 @@ def _create_summarizer(config: Config):
     """Create the appropriate summarizer based on config."""
     if config.summarization.backend == "openai":
         from ownscribe.summarization.openai_summarizer import OpenAISummarizer
-        return OpenAISummarizer(config.summarization)
+        return OpenAISummarizer(config.summarization, config.templates)
     else:
         from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
-        return OllamaSummarizer(config.summarization)
+        return OllamaSummarizer(config.summarization, config.templates)
 
 
 def _format_output(config: Config, transcript_result, summary_text: str | None = None) -> tuple[str, str | None]:

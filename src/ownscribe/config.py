@@ -34,8 +34,12 @@ enabled = true
 backend = "ollama"        # "ollama" or "openai" (for LM Studio, llama.cpp server, etc.)
 model = "mistral"         # model name
 host = "http://localhost:11434"  # ollama: :11434, LM Studio: :1234
-# system_prompt = "You are a meeting notes assistant."  # custom system prompt (empty = built-in default)
-# prompt = "Summarize: {transcript}"                    # custom user prompt; must contain {transcript}
+# template = "meeting"    # built-in: "meeting", "lecture", or "brief"
+
+# Custom templates (optional):
+# [templates.my-notes]
+# system_prompt = "You are a helpful assistant."
+# prompt = "Summarize:\\n{transcript}"
 
 [output]
 dir = "~/ownscribe"       # base output directory
@@ -74,6 +78,11 @@ class SummarizationConfig:
     backend: str = "ollama"
     model: str = "mistral"
     host: str = "http://localhost:11434"
+    template: str = ""
+
+
+@dataclass
+class TemplateConfig:
     system_prompt: str = ""
     prompt: str = ""
 
@@ -96,6 +105,7 @@ class Config:
     diarization: DiarizationConfig = field(default_factory=DiarizationConfig)
     summarization: SummarizationConfig = field(default_factory=SummarizationConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
+    templates: dict[str, TemplateConfig] = field(default_factory=dict)
 
     @classmethod
     def load(cls) -> Config:
@@ -142,6 +152,13 @@ def _merge_toml(config: Config, data: dict) -> Config:
         for k, v in data["output"].items():
             if hasattr(config.output, k):
                 setattr(config.output, k, v)
+
+    if "templates" in data:
+        for name, t_data in data["templates"].items():
+            config.templates[name] = TemplateConfig(
+                system_prompt=t_data.get("system_prompt", ""),
+                prompt=t_data.get("prompt", ""),
+            )
 
     return config
 
