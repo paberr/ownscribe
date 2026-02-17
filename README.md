@@ -39,6 +39,7 @@ All audio, transcripts, and summaries remain local.
 - macOS 14.2+ (for system audio capture)
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
+- [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
 - Xcode Command Line Tools (`xcode-select --install`)
 - One of:
   - [Ollama](https://ollama.ai) — `brew install ollama`
@@ -46,6 +47,13 @@ All audio, transcripts, and summaries remain local.
   - Any OpenAI-compatible local server
 
 Works with any app that outputs audio through Core Audio (Zoom, Teams, Meet, etc.).
+
+> **Tip:** Your terminal app (Terminal, iTerm2, VS Code, etc.) needs **Screen Recording** permission to capture system audio.
+> Open the settings panel directly with:
+> ```bash
+> open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+> ```
+> Enable your terminal app, then restart it.
 
 ## Installation
 

@@ -13,5 +13,9 @@ class Summarizer(abc.ABC):
         """Summarize a transcript and return the summary text."""
 
     @abc.abstractmethod
+    def generate_title(self, summary_text: str) -> str:
+        """Generate a short meeting title from a summary."""
+
+    @abc.abstractmethod
     def is_available(self) -> bool:
         """Check if the summarization backend is reachable."""

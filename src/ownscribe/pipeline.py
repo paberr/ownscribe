@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 import select
 import signal
 import sys
@@ -48,7 +50,7 @@ def _check_audio_silence(audio_path: Path) -> None:
 def _get_output_dir(config: Config) -> Path:
     """Create and return a timestamped output directory."""
     base = config.output.resolved_dir
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
     out_dir = base / timestamp
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
@@ -101,6 +103,26 @@ def _format_output(config: Config, transcript_result, summary_text: str | None =
         tx = format_transcript(transcript_result)
         sm = format_summary(summary_text) if summary_text else None
         return tx, sm
+
+
+def _slugify(text: str, max_length: int = 50) -> str:
+    """Convert text to a filesystem-safe slug."""
+    slug = text.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    slug = slug.strip("-")
+    return slug[:max_length].rstrip("-")
+
+
+def _generate_title_slug(summary: str, summarizer) -> str:
+    """Generate a title slug from a summary. Returns empty string on failure."""
+    try:
+        title = summarizer.generate_title(summary)
+        return _slugify(title)
+    except Exception:
+        logging.getLogger(__name__).warning("Could not generate title", exc_info=True)
+        return ""
 
 
 def run_pipeline(config: Config) -> None:
@@ -215,15 +237,27 @@ def run_summarize(config: Config, transcript_file: str) -> None:
         )
         raise SystemExit(1)
 
-    with Spinner(f"Summarizing with {config.summarization.model}"):
-        summary = summarizer.summarize(transcript_text)
-
     from ownscribe.output.markdown import format_summary
 
     out_dir = _get_output_dir(config)
+
+    with Spinner(f"Summarizing with {config.summarization.model}"):
+        summary = summarizer.summarize(transcript_text)
+        title_slug = _generate_title_slug(summary, summarizer)
+
     summary_md = format_summary(summary)
     summary_path = out_dir / "summary.md"
     summary_path.write_text(summary_md)
+
+    if title_slug:
+        new_dir = out_dir.parent / f"{out_dir.name}_{title_slug}"
+        try:
+            out_dir.rename(new_dir)
+            out_dir = new_dir
+        except Exception:
+            logging.getLogger(__name__).warning("Could not rename output directory", exc_info=True)
+
+    summary_path = out_dir / "summary.md"
 
     click.echo(f"\n{summary_md}")
     click.echo(f"Summary saved to {summary_path}")
@@ -240,6 +274,7 @@ def _do_transcribe_and_summarize(
     sum_enabled = summarize and config.summarization.enabled
 
     summary = None
+    title_slug = ""
     with PipelineProgress(diarize=diar_enabled, summarize=sum_enabled) as progress:
         try:
             transcriber = _create_transcriber(config, progress=progress)
@@ -266,6 +301,7 @@ def _do_transcribe_and_summarize(
             else:
                 progress.begin("summarizing")
                 summary = summarizer.summarize(result.full_text)
+                title_slug = _generate_title_slug(summary, summarizer)
                 progress.complete("summarizing")
 
     transcript_str, _ = _format_output(config, result)
@@ -282,10 +318,21 @@ def _do_transcribe_and_summarize(
         summary_path.write_text(summary_str or summary)
         click.echo(f"Summary saved to {summary_path}")
         click.echo(f"\n{summary_str or summary}")
+
+        # Rename output dir with pre-computed slug (filesystem-only, no LLM call)
+        if title_slug:
+            new_dir = out_dir.parent / f"{out_dir.name}_{title_slug}"
+            try:
+                out_dir.rename(new_dir)
+                out_dir = new_dir
+            except Exception:
+                logging.getLogger(__name__).warning("Could not rename output directory", exc_info=True)
     elif not summarize:
         click.echo(f"\n{transcript_str}")
 
-    # Delete recording if configured
-    if not config.output.keep_recording and audio_path.exists():
-        audio_path.unlink()
-        click.echo(f"Recording deleted (keep_recording=false): {audio_path}")
+    # Delete recording if configured — use the (possibly renamed) out_dir
+    if not config.output.keep_recording:
+        actual_audio_path = out_dir / audio_path.name
+        if actual_audio_path.exists():
+            actual_audio_path.unlink()
+            click.echo(f"Recording deleted (keep_recording=false): {actual_audio_path}")

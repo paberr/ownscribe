@@ -45,6 +45,16 @@ class WhisperXTranscriber(Transcriber):
         )
 
     def transcribe(self, audio_path: Path) -> TranscriptResult:
+        import shutil
+
+        if not shutil.which("ffmpeg"):
+            click.echo(
+                "Error: ffmpeg is not installed. WhisperX requires ffmpeg for audio decoding.\n"
+                "Install with: brew install ffmpeg",
+                err=True,
+            )
+            raise SystemExit(1)
+
         # --- Telemetry toggle (must happen before importing whisperx) ---
         os.environ.setdefault("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
         if self._diar_config is None or not self._diar_config.telemetry:

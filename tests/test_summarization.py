@@ -103,6 +103,50 @@ class TestOpenAICustomPrompts:
         assert body["messages"][1]["content"] == "Arr! Summarize: Alice: Hello"
 
 
+class TestOllamaGenerateTitle:
+    """Test OllamaSummarizer.generate_title against a mock HTTP server."""
+
+    def test_generate_title(self, httpserver):
+        import json
+
+        response_body = {
+            "message": {"role": "assistant", "content": "Q3 Budget Review"},
+            "done": True,
+        }
+        httpserver.expect_request("/api/chat", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="ollama", model="test-model")
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        result = summarizer.generate_title("The meeting covered Q3 budget.")
+
+        assert result == "Q3 Budget Review"
+
+        request = httpserver.log[0][0]
+        body = json.loads(request.data)
+        assert body["messages"][0]["content"] == "You generate short meeting titles."
+        assert "Q3 budget" in body["messages"][1]["content"]
+
+    def test_generate_title_strips_think_tags(self, httpserver):
+        response_body = {
+            "message": {"role": "assistant", "content": "<think>hmm</think>\nBudget Planning"},
+            "done": True,
+        }
+        httpserver.expect_request("/api/chat", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="ollama", model="test-model")
+
+        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+
+        summarizer = OllamaSummarizer(config)
+        result = summarizer.generate_title("summary text")
+
+        assert "<think>" not in result
+        assert result == "Budget Planning"
+
+
 class TestOllamaSummarizer:
     """Test OllamaSummarizer against a mock HTTP server."""
 
@@ -142,6 +186,66 @@ class TestOllamaSummarizer:
 
         summarizer = OllamaSummarizer(config)
         assert summarizer.is_available() is False
+
+
+class TestOpenAIGenerateTitle:
+    """Test OpenAISummarizer.generate_title against a mock HTTP server."""
+
+    def test_generate_title(self, httpserver):
+        import json
+
+        response_body = {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Q3 Budget Review"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "test-model",
+        }
+        httpserver.expect_request("/v1/chat/completions", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="openai", model="test-model")
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        result = summarizer.generate_title("The meeting covered Q3 budget.")
+
+        assert result == "Q3 Budget Review"
+
+        request = httpserver.log[0][0]
+        body = json.loads(request.data)
+        assert body["messages"][0]["content"] == "You generate short meeting titles."
+        assert "Q3 budget" in body["messages"][1]["content"]
+
+    def test_generate_title_strips_think_tags(self, httpserver):
+        response_body = {
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "<think>hmm</think>\nBudget Planning"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "test-model",
+        }
+        httpserver.expect_request("/v1/chat/completions", method="POST").respond_with_json(response_body)
+
+        config = SummarizationConfig(host=httpserver.url_for(""), backend="openai", model="test-model")
+
+        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+
+        summarizer = OpenAISummarizer(config)
+        result = summarizer.generate_title("summary text")
+
+        assert "<think>" not in result
+        assert result == "Budget Planning"
 
 
 class TestOpenAISummarizer:

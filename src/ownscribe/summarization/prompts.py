@@ -38,6 +38,15 @@ Transcript:
 {transcript}"""
 
 
+TITLE_SYSTEM = "You generate short meeting titles."
+
+TITLE_PROMPT = (
+    "Based on this meeting summary, generate a short title of 3-5 words. "
+    "Return ONLY the title, nothing else. No quotes, no punctuation, no explanation."
+    "\n\n{summary}"
+)
+
+
 def get_system_prompt(custom: str) -> str:
     """Return *custom* if non-empty, otherwise the built-in system prompt."""
     return custom if custom else MEETING_SUMMARY_SYSTEM

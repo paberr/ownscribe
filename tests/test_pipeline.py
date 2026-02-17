@@ -82,6 +82,60 @@ class TestFormatOutput:
         assert "segments" in parsed
 
 
+class TestSlugify:
+    def test_basic(self):
+        from ownscribe.pipeline import _slugify
+
+        assert _slugify("Q3 Budget Planning Review") == "q3-budget-planning-review"
+
+    def test_strips_special_chars(self):
+        from ownscribe.pipeline import _slugify
+
+        assert _slugify("Hello, World! @#$") == "hello-world"
+
+    def test_truncates_to_max_length(self):
+        from ownscribe.pipeline import _slugify
+
+        result = _slugify("a " * 100, max_length=10)
+        assert len(result) <= 10
+
+    def test_empty_input(self):
+        from ownscribe.pipeline import _slugify
+
+        assert _slugify("") == ""
+
+    def test_colons_removed(self):
+        from ownscribe.pipeline import _slugify
+
+        assert _slugify("Meeting: Budget Review") == "meeting-budget-review"
+
+
+class TestGenerateTitleSlug:
+    def test_returns_slug(self):
+        from ownscribe.pipeline import _generate_title_slug
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.generate_title.return_value = "Budget Review"
+
+        assert _generate_title_slug("summary text", mock_summarizer) == "budget-review"
+
+    def test_returns_empty_on_empty_slug(self):
+        from ownscribe.pipeline import _generate_title_slug
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.generate_title.return_value = "!!!"  # slugifies to empty
+
+        assert _generate_title_slug("summary", mock_summarizer) == ""
+
+    def test_returns_empty_on_llm_failure(self):
+        from ownscribe.pipeline import _generate_title_slug
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.generate_title.side_effect = Exception("LLM down")
+
+        assert _generate_title_slug("summary", mock_summarizer) == ""
+
+
 class TestDoTranscribeAndSummarize:
     """Test _do_transcribe_and_summarize with mocked transcriber/summarizer."""
 

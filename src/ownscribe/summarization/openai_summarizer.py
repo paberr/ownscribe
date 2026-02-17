@@ -39,3 +39,15 @@ class OpenAISummarizer(Summarizer):
             ],
         )
         return clean_response(response.choices[0].message.content or "")
+
+    def generate_title(self, summary_text: str) -> str:
+        from ownscribe.summarization.prompts import TITLE_PROMPT, TITLE_SYSTEM
+
+        response = self._client.chat.completions.create(
+            model=self._config.model,
+            messages=[
+                {"role": "system", "content": TITLE_SYSTEM},
+                {"role": "user", "content": TITLE_PROMPT.format(summary=summary_text)},
+            ],
+        )
+        return clean_response(response.choices[0].message.content or "").strip()
