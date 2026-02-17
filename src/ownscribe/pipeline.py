@@ -200,7 +200,8 @@ def run_pipeline(config: Config) -> None:
 
     if not audio_path.exists() or audio_path.stat().st_size <= 44:
         click.echo(
-            "Error: No audio was captured. Make sure audio is playing on your system.",
+            "Error: No audio was captured. Make sure audio is playing on your system, "
+            "or use --device to capture mic-only.",
             err=True,
         )
         raise SystemExit(1)
