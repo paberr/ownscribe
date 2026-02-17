@@ -14,6 +14,12 @@ import click
 
 from ownscribe.audio.base import AudioRecorder
 
+# Timeouts for graceful shutdown of the Swift helper.
+# SIGINT triggers track merging (system + mic) which can take a while for long recordings.
+# wait() returns immediately on exit, so generous values cost nothing in the normal case.
+_STOP_TIMEOUT = 30  # seconds to wait after SIGINT (allows track merging)
+_KILL_TIMEOUT = 10  # seconds to wait after SIGTERM before SIGKILL
+
 # Look for binary relative to package, then in PATH
 _BINARY_CANDIDATES = [
     Path(__file__).resolve().parents[3] / "bin" / "ownscribe-audio",  # dev: repo root
@@ -119,10 +125,14 @@ class CoreAudioRecorder(AudioRecorder):
         if self._process and self._process.poll() is None:
             self._process.send_signal(signal.SIGINT)
             try:
-                self._process.wait(timeout=5)
+                self._process.wait(timeout=_STOP_TIMEOUT)
             except subprocess.TimeoutExpired:
                 self._process.terminate()
-                self._process.wait(timeout=5)
+                try:
+                    self._process.wait(timeout=_KILL_TIMEOUT)
+                except subprocess.TimeoutExpired:
+                    self._process.kill()
+                    self._process.wait()
         if self._process and self._process.stderr:
             stderr_output = self._process.stderr.read().decode(errors="replace")
             if stderr_output:
