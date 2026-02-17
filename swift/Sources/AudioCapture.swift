@@ -433,63 +433,11 @@ func listInputDevices() {
     }
 }
 
-// MARK: - Convert mic audio to output format (48kHz stereo)
-
-func convertMicToOutput(micPath: String, outputPath: String) throws {
-    let micFile = try AVAudioFile(forReading: URL(fileURLWithPath: micPath))
-    let micFormat = micFile.processingFormat
-
-    let outputSampleRate: Double = 48000
-    let outputChannels: AVAudioChannelCount = 2
-    let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                      sampleRate: outputSampleRate,
-                                      channels: outputChannels,
-                                      interleaved: true)!
-    let outputFile = try AVAudioFile(forWriting: URL(fileURLWithPath: outputPath),
-                                      settings: outputFormat.settings,
-                                      commonFormat: .pcmFormatFloat32,
-                                      interleaved: true)
-
-    let converter = AVAudioConverter(from: micFormat, to: outputFormat)!
-    let chunkSize: AVAudioFrameCount = 8192
-
-    var done = false
-    while !done {
-        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: chunkSize) else { break }
-
-        var convError: NSError?
-        let status = converter.convert(to: outBuffer, error: &convError) { inNumberOfPackets, outStatus in
-            let remaining = AVAudioFrameCount(micFile.length - micFile.framePosition)
-            if remaining == 0 {
-                outStatus.pointee = .endOfStream
-                return nil
-            }
-            let toRead = min(inNumberOfPackets, remaining)
-            guard let buf = AVAudioPCMBuffer(pcmFormat: micFormat, frameCapacity: toRead) else {
-                outStatus.pointee = .endOfStream
-                return nil
-            }
-            do {
-                try micFile.read(into: buf, frameCount: toRead)
-                outStatus.pointee = .haveData
-                return buf
-            } catch {
-                outStatus.pointee = .endOfStream
-                return nil
-            }
-        }
-
-        if status == .endOfStream {
-            done = true
-        }
-
-        if outBuffer.frameLength > 0 {
-            try outputFile.write(from: outBuffer)
-        }
-    }
-}
-
 // MARK: - Merge audio files with timestamp alignment
+
+/// A standard WAV file header (RIFF + fmt + data chunk header) is 44 bytes.
+/// Files at or below this size contain no audio frames.
+let wavHeaderSize = 44
 
 func mergeAudioFiles(systemPath: String, micPath: String,
                      systemStartHostTime: UInt64, micStartHostTime: UInt64,
@@ -499,43 +447,41 @@ func mergeAudioFiles(systemPath: String, micPath: String,
     let micFileSize = (try? fm.attributesOfItem(atPath: micPath)[.size] as? Int) ?? 0
 
     // Both empty — clean up temp files and let the caller handle it
-    if systemFileSize <= 44 && micFileSize <= 44 {
+    if systemFileSize <= wavHeaderSize && micFileSize <= wavHeaderSize {
         try? fm.removeItem(atPath: systemPath)
         try? fm.removeItem(atPath: micPath)
-        return
-    }
-
-    // System audio empty but mic has data — convert mic to output format directly
-    if systemFileSize <= 44 && micFileSize > 44 {
-        try convertMicToOutput(micPath: micPath, outputPath: outputPath)
-        try? fm.removeItem(atPath: systemPath)
-        try? fm.removeItem(atPath: micPath)
-        fputs("Merged audio saved to \(outputPath) (mic only, no system audio)\n", stderr)
         return
     }
 
     // Mic empty but system has data — just rename system file
-    if micFileSize <= 44 && systemFileSize > 44 {
+    if micFileSize <= wavHeaderSize && systemFileSize > wavHeaderSize {
         try? fm.removeItem(atPath: micPath)
         try fm.moveItem(atPath: systemPath, toPath: outputPath)
         fputs("Merged audio saved to \(outputPath) (system only, no mic audio)\n", stderr)
         return
     }
 
-    let systemFile = try AVAudioFile(forReading: URL(fileURLWithPath: systemPath))
+    // Open files — system is optional (may be empty when only mic captured audio)
+    let systemFile: AVAudioFile? = systemFileSize > wavHeaderSize
+        ? try AVAudioFile(forReading: URL(fileURLWithPath: systemPath)) : nil
     let micFile = try AVAudioFile(forReading: URL(fileURLWithPath: micPath))
-
-    // Compute offset in seconds between the two start times using mach_timebase_info
-    var timebase = mach_timebase_info_data_t()
-    mach_timebase_info(&timebase)
-    let ticksToNanos = Double(timebase.numer) / Double(timebase.denom)
-
-    let systemStartNanos = Double(systemStartHostTime) * ticksToNanos
-    let micStartNanos = Double(micStartHostTime) * ticksToNanos
-    let offsetSeconds = (micStartNanos - systemStartNanos) / 1_000_000_000.0
 
     let outputSampleRate: Double = 48000
     let outputChannels: AVAudioChannelCount = 2
+
+    // Compute offset in seconds between the two start times using mach_timebase_info
+    let offsetFrames: Int64
+    if systemFile != nil {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let ticksToNanos = Double(timebase.numer) / Double(timebase.denom)
+        let systemStartNanos = Double(systemStartHostTime) * ticksToNanos
+        let micStartNanos = Double(micStartHostTime) * ticksToNanos
+        let offsetSeconds = (micStartNanos - systemStartNanos) / 1_000_000_000.0
+        offsetFrames = Int64(offsetSeconds * outputSampleRate)
+    } else {
+        offsetFrames = 0
+    }
     let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                       sampleRate: outputSampleRate,
                                       channels: outputChannels,
@@ -550,11 +496,8 @@ func mergeAudioFiles(systemPath: String, micPath: String,
     let micConverter = AVAudioConverter(from: micFormat, to: outputFormat)!
     let micRate = micFormat.sampleRate
 
-    // Offset in output-rate frames: positive means mic started later
-    let offsetFrames = Int64(offsetSeconds * outputSampleRate)
-
     let chunkSize: AVAudioFrameCount = 8192
-    let systemLength = Int64(systemFile.length)
+    let systemLength = systemFile.map { Int64($0.length) } ?? 0
     // Mic file length converted to output-rate frames
     let micLengthOutput = Int64(Double(micFile.length) * outputSampleRate / micRate)
 
@@ -582,17 +525,19 @@ func mergeAudioFiles(systemPath: String, micPath: String,
         }
 
         // Read and mix system audio (manual interleave from non-interleaved processingFormat)
-        let sysFrameInFile = (offsetFrames >= 0) ? outputFrame : outputFrame + offsetFrames
-        if sysFrameInFile >= 0 && sysFrameInFile < systemLength {
-            let sysReadCount = AVAudioFrameCount(min(Int64(framesToProcess), systemLength - sysFrameInFile))
-            if sysReadCount > 0 {
-                systemFile.framePosition = AVAudioFramePosition(sysFrameInFile)
-                if let sysBuf = AVAudioPCMBuffer(pcmFormat: systemFile.processingFormat, frameCapacity: sysReadCount) {
-                    try systemFile.read(into: sysBuf, frameCount: sysReadCount)
-                    let sysData = sysBuf.floatChannelData!
-                    for i in 0..<Int(sysBuf.frameLength) {
-                        outPtr[i * 2] += sysData[0][i]
-                        outPtr[i * 2 + 1] += sysData[1][i]
+        if let systemFile = systemFile {
+            let sysFrameInFile = (offsetFrames >= 0) ? outputFrame : outputFrame + offsetFrames
+            if sysFrameInFile >= 0 && sysFrameInFile < systemLength {
+                let sysReadCount = AVAudioFrameCount(min(Int64(framesToProcess), systemLength - sysFrameInFile))
+                if sysReadCount > 0 {
+                    systemFile.framePosition = AVAudioFramePosition(sysFrameInFile)
+                    if let sysBuf = AVAudioPCMBuffer(pcmFormat: systemFile.processingFormat, frameCapacity: sysReadCount) {
+                        try systemFile.read(into: sysBuf, frameCount: sysReadCount)
+                        let sysData = sysBuf.floatChannelData!
+                        for i in 0..<Int(sysBuf.frameLength) {
+                            outPtr[i * 2] += sysData[0][i]
+                            outPtr[i * 2 + 1] += sysData[1][i]
+                        }
                     }
                 }
             }
@@ -660,7 +605,8 @@ func mergeAudioFiles(systemPath: String, micPath: String,
     try? FileManager.default.removeItem(atPath: systemPath)
     try? FileManager.default.removeItem(atPath: micPath)
 
-    fputs("Merged audio saved to \(outputPath)\n", stderr)
+    let detail = systemFile == nil ? " (mic only, no system audio)" : ""
+    fputs("Merged audio saved to \(outputPath)\(detail)\n", stderr)
 }
 
 // MARK: - Main

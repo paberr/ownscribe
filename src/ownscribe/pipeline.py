@@ -16,6 +16,10 @@ import click
 from ownscribe.config import Config
 from ownscribe.progress import PipelineProgress, Spinner
 
+# A standard WAV file header (RIFF + fmt + data chunk header) is 44 bytes.
+# Files at or below this size contain no audio frames.
+_WAV_HEADER_SIZE = 44
+
 
 def _check_audio_silence(audio_path: Path) -> None:
     """Check if the recorded audio is silent and warn the user."""
@@ -151,7 +155,7 @@ def run_pipeline(config: Config) -> None:
                 not warned_no_data
                 and elapsed >= 3
                 and audio_path.exists()
-                and audio_path.stat().st_size <= 44
+                and audio_path.stat().st_size <= _WAV_HEADER_SIZE
             ):
                 click.echo(
                     "\n\n  Warning: No audio data received yet.\n",
@@ -176,7 +180,7 @@ def run_pipeline(config: Config) -> None:
     click.echo("\n\nStopping recording...")
     recorder.stop()
 
-    if not audio_path.exists() or audio_path.stat().st_size <= 44:
+    if not audio_path.exists() or audio_path.stat().st_size <= _WAV_HEADER_SIZE:
         click.echo(
             "Error: No audio was captured. Make sure audio is playing on your system, "
             "or use --device to capture mic-only.",
