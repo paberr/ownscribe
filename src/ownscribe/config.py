@@ -35,6 +35,7 @@ backend = "ollama"        # "ollama" or "openai" (for LM Studio, llama.cpp serve
 model = "mistral"         # model name
 host = "http://localhost:11434"  # ollama: :11434, LM Studio: :1234
 # template = "meeting"    # built-in: "meeting", "lecture", or "brief"
+# context_size = 0        # 0 = auto-detect from model; set manually for OpenAI-compatible backends
 
 # Custom templates (optional):
 # [templates.my-notes]
@@ -79,6 +80,7 @@ class SummarizationConfig:
     model: str = "mistral"
     host: str = "http://localhost:11434"
     template: str = ""
+    context_size: int = 0
 
 
 @dataclass

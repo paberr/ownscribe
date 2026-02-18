@@ -17,5 +17,12 @@ class Summarizer(abc.ABC):
         """Generate a short meeting title from a summary."""
 
     @abc.abstractmethod
+    def chat(
+        self, system_prompt: str, user_prompt: str,
+        json_mode: bool = False, json_schema: dict | None = None,
+    ) -> str:
+        """Send a chat completion request and return the response text."""
+
+    @abc.abstractmethod
     def is_available(self) -> bool:
         """Check if the summarization backend is reachable."""

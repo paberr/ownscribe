@@ -21,6 +21,39 @@ class OpenAISummarizer(Summarizer):
             base_url = base_url.rstrip("/") + "/v1"
         self._client = openai.OpenAI(base_url=base_url, api_key="not-needed")
 
+    def chat(
+        self, system_prompt: str, user_prompt: str,
+        json_mode: bool = False, json_schema: dict | None = None,
+    ) -> str:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        formats_to_try: list[dict | None] = [None]
+        if json_mode:
+            if json_schema is not None:
+                formats_to_try = [
+                    {"type": "json_object"},
+                    {"type": "json_schema", "json_schema": json_schema},
+                    None,
+                ]
+            else:
+                formats_to_try = [{"type": "json_object"}, None]
+        for fmt in formats_to_try:
+            try:
+                kwargs = {}
+                if fmt is not None:
+                    kwargs["response_format"] = fmt
+                response = self._client.chat.completions.create(
+                    model=self._config.model,
+                    messages=messages,
+                    **kwargs,
+                )
+                return clean_response(response.choices[0].message.content or "")
+            except openai.BadRequestError:
+                continue
+        return ""
+
     def is_available(self) -> bool:
         try:
             self._client.models.list()
