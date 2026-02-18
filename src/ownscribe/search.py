@@ -43,7 +43,15 @@ def ask(config: Config, question: str, since: str | None, limit: int | None) -> 
     if skipped:
         click.echo(f"({skipped} meetings without summaries were skipped)")
 
+    if not config.summarization.enabled:
+        click.echo("Summarization must be enabled to use ask. Check your configuration.")
+        return
+
     summarizer = create_summarizer(config)
+    if not summarizer.is_available():
+        click.echo("Summarization backend is not reachable. Check your configuration.")
+        return
+
     context_size = _resolve_context_size(config)
 
     # Stage 1
@@ -353,7 +361,7 @@ def _find_relevant_meetings(
                 spinner.update("Falling back to keyword search")
             return _rank_meetings(question, keyword_matches)
 
-    # Build result list preserving order, then rank
+    # Build result list from unique IDs, then rank
     meeting_by_id = {m.folder_name: m for m in meetings}
     relevant = [meeting_by_id[id_] for id_ in all_relevant_ids if id_ in meeting_by_id]
     return _rank_meetings(question, relevant)
@@ -410,7 +418,6 @@ def _answer_from_transcripts(
 
     transcript_parts: list[str] = []
     used_tokens = 0
-    included = 0
     skipped = 0
 
     for m in meetings:
@@ -428,7 +435,6 @@ def _answer_from_transcripts(
 
         transcript_parts.append(entry)
         used_tokens += entry_tokens
-        included += 1
 
     if not transcript_parts:
         return "No transcript text available for the relevant meetings.", skipped
@@ -469,7 +475,7 @@ def _key_phrases(quote: str, min_words: int = 8, max_words: int = 12) -> list[st
     """Extract key phrases (8-12 word spans) from a quote for verification."""
     words = quote.split()
     if len(words) <= max_words:
-        return [" ".join(words)] if len(words) >= 4 else []
+        return [" ".join(words)] if len(words) >= min_words else []
 
     phrases = []
     # Take a few spans spread across the quote
@@ -505,13 +511,23 @@ def _verify_quotes(answer: str, transcripts: dict[str, str]) -> str:
     # Annotate unverified quotes in the answer
     result_lines: list[str] = []
     for line in answer.split("\n"):
-        result_lines.append(line)
         stripped = line.strip()
-        # Check if this line ends a blockquote that contains an unverified quote
+        annotated = False
+        # Blockquote annotation
         if stripped.startswith(">"):
             quote_text = stripped.lstrip("> ").strip()
             for uq in unverified_quotes:
                 if quote_text and quote_text in uq:
+                    result_lines.append(line)
                     result_lines.append("[unverified]")
+                    annotated = True
                     break
+        # Inline quote annotation: mark "..." segments that are unverified
+        if not annotated:
+            modified = line
+            for uq in unverified_quotes:
+                target = f'"{uq}"'
+                if target in modified:
+                    modified = modified.replace(target, f'{target} [unverified]')
+            result_lines.append(modified)
     return "\n".join(result_lines)

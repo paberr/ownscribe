@@ -431,6 +431,31 @@ class TestVerifyQuotes:
         result = _verify_quotes(answer, transcripts)
         assert "[unverified]" in result
 
+    def test_inline_quote_not_found(self):
+        answer = (
+            'Anna said "The completely fabricated quote that does not'
+            ' exist in any transcript at all" in the meeting.'
+        )
+        transcripts = {
+            "meeting-1": "Alice: Let's discuss the budget.\nBob: Sure, sounds good.",
+        }
+        result = _verify_quotes(answer, transcripts)
+        assert "[unverified]" in result
+
+    def test_inline_quote_verified(self):
+        answer = (
+            'Anna said "The deadline for Q1 deliverables is March 15th'
+            ' but I think we should aim for March 10th" in the meeting.'
+        )
+        transcripts = {
+            "meeting-1": (
+                "The deadline for Q1 deliverables is March 15th but I think"
+                " we should aim for March 10th to have buffer time."
+            ),
+        }
+        result = _verify_quotes(answer, transcripts)
+        assert "[unverified]" not in result
+
     def test_empty_transcripts(self):
         answer = "> Some quote here"
         result = _verify_quotes(answer, {})
@@ -503,6 +528,7 @@ class TestAskIntegration:
         show_response = {
             "model_info": {"general.context_length": 8192},
         }
+        httpserver.expect_ordered_request("/api/tags", method="GET").respond_with_json({"models": []})
         httpserver.expect_ordered_request("/api/show", method="POST").respond_with_json(show_response)
         httpserver.expect_ordered_request("/api/chat", method="POST").respond_with_json(find_response)
         httpserver.expect_ordered_request("/api/chat", method="POST").respond_with_json(answer_response)
