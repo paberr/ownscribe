@@ -21,27 +21,24 @@ class OpenAISummarizer(Summarizer):
             base_url = base_url.rstrip("/") + "/v1"
         self._client = openai.OpenAI(base_url=base_url, api_key="not-needed")
 
-    def chat(self, system_prompt: str, user_prompt: str, json_mode: bool = False) -> str:
+    def chat(
+        self, system_prompt: str, user_prompt: str,
+        json_mode: bool = False, json_schema: dict | None = None,
+    ) -> str:
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
         formats_to_try: list[dict | None] = [None]
         if json_mode:
-            formats_to_try = [
-                {"type": "json_object"},
-                {"type": "json_schema", "json_schema": {
-                    "name": "search_results",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {"relevant": {"type": "array", "items": {"type": "string"}}},
-                        "required": ["relevant"],
-                        "additionalProperties": False,
-                    },
-                }},
-                None,
-            ]
+            if json_schema is not None:
+                formats_to_try = [
+                    {"type": "json_object"},
+                    {"type": "json_schema", "json_schema": json_schema},
+                    None,
+                ]
+            else:
+                formats_to_try = [{"type": "json_object"}, None]
         for fmt in formats_to_try:
             try:
                 kwargs = {}

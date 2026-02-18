@@ -23,6 +23,17 @@ from ownscribe.summarization.prompts import (
 
 _DEFAULT_CONTEXT_SIZE = 8192
 
+_SEARCH_RESULTS_SCHEMA = {
+    "name": "search_results",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {"relevant": {"type": "array", "items": {"type": "string"}}},
+        "required": ["relevant"],
+        "additionalProperties": False,
+    },
+}
+
 
 class Meeting(NamedTuple):
     folder_name: str
@@ -344,7 +355,7 @@ def _find_relevant_meetings(
         summaries = "\n\n".join(summaries_parts)
 
         prompt = SEARCH_FIND_PROMPT.format(question=question, summaries=summaries)
-        response = summarizer.chat(SEARCH_FIND_SYSTEM, prompt, json_mode=True)
+        response = summarizer.chat(SEARCH_FIND_SYSTEM, prompt, json_mode=True, json_schema=_SEARCH_RESULTS_SCHEMA)
 
         ids = _parse_relevant_ids(response)
         if ids is None:

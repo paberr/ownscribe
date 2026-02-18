@@ -40,7 +40,10 @@ class FakeSummarizer:
         self._responses = list(responses or [])
         self._call_idx = 0
 
-    def chat(self, system_prompt: str, user_prompt: str, json_mode: bool = False) -> str:
+    def chat(
+        self, system_prompt: str, user_prompt: str,
+        json_mode: bool = False, json_schema: dict | None = None,
+    ) -> str:
         self.calls.append((system_prompt, user_prompt, json_mode))
         if self._responses:
             resp = self._responses[self._call_idx % len(self._responses)]
@@ -607,7 +610,8 @@ class TestOpenAIChatJsonModeFallback:
         cfg.model = "test-model"
         summarizer = OpenAISummarizer(cfg)
 
-        result = summarizer.chat("system", "user", json_mode=True)
+        schema = {"name": "test", "strict": True, "schema": {"type": "object"}}
+        result = summarizer.chat("system", "user", json_mode=True, json_schema=schema)
         assert '"relevant"' in result or "meeting-1" in result
 
     def test_openai_chat_json_schema_fallback(self, httpserver):
@@ -631,5 +635,6 @@ class TestOpenAIChatJsonModeFallback:
         cfg.model = "test-model"
         summarizer = OpenAISummarizer(cfg)
 
-        result = summarizer.chat("system", "user", json_mode=True)
+        schema = {"name": "test", "strict": True, "schema": {"type": "object"}}
+        result = summarizer.chat("system", "user", json_mode=True, json_schema=schema)
         assert "meeting-2" in result
