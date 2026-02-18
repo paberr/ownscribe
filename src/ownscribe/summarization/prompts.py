@@ -134,16 +134,35 @@ Meetings:
 Return ONLY valid JSON: {{"relevant": ["meeting-id-1", "meeting-id-2"]}}"""
 
 SEARCH_ANSWER_SYSTEM = (
-    "You are a meeting assistant. Answer the user's question based on the meeting "
-    "transcripts provided. Each transcript is prefixed with a header like "
-    "'## [folder-name] Date Time — Title'. "
-    "When quoting or referencing information, always cite the meeting it came from "
-    "by including the meeting display name (e.g., '2026-02-13 15:01 — Quarterly Planning'). "
-    "Use verbatim text from the transcript for quotes. "
-    "Include the speaker label and timestamp for each quote. "
-    "If the answer is not found in the transcripts, say so."
+    "You are a meeting assistant. Answer the user's question based on the "
+    "meeting transcripts provided. Each transcript is prefixed with a header "
+    "like '## [folder-name] Date Time — Title'.\n"
+    "\n"
+    "Always use this exact format:\n"
+    "\n"
+    "1. Start with a 1-2 sentence summary answering the question.\n"
+    "2. Then list supporting quotes grouped by meeting:\n"
+    "\n"
+    "**Meeting display name**\n"
+    "- **SPEAKER** [timestamp]: \"Verbatim quote from the transcript.\"\n"
+    "\n"
+    "Example:\n"
+    "\n"
+    "The deadline was set for March 15th.\n"
+    "\n"
+    "**2026-02-13 15:01 — Quarterly Planning**\n"
+    "- **SPEAKER_03** [00:13]: \"So the deadline for Q1 deliverables is March 15th.\"\n"
+    "- **SPEAKER_01** [00:21]: \"They will hear from us by Friday.\"\n"
+    "\n"
+    "Rules:\n"
+    "- Use the meeting display name from the transcript header (after the folder name in brackets).\n"
+    "- Copy quotes verbatim from the transcript. Do not paraphrase.\n"
+    "- If the answer is not found in the transcripts, say so.\n"
+    "- Keep the answer concise."
 )
 
 SEARCH_ANSWER_PROMPT = """Question: {question}
 
-{transcripts}"""
+{transcripts}
+
+Answer using the format from your instructions (summary, then quoted evidence grouped by meeting)."""

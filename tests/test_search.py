@@ -491,7 +491,11 @@ class TestAskIntegration:
         answer_response = {
             "message": {
                 "role": "assistant",
-                "content": 'Anna said:\n> The deadline is March 15th.\n\nThis was in the Quarterly Planning meeting.',
+                "content": (
+                    'The deadline is March 15th.\n\n'
+                    '**2026-02-13 15:01 — Quarterly Planning**\n'
+                    '- **Anna** [00:01:00]: "The deadline is March 15th."'
+                ),
             },
             "done": True,
         }
