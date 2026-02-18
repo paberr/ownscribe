@@ -32,6 +32,7 @@ All audio, transcripts, and summaries remain local.
 - **Pipeline progress** — live checklist showing transcription, diarization sub-steps, and summarization progress
 - **Local LLM summarization** — structured meeting notes via Ollama, LM Studio, or any OpenAI-compatible server
 - **Summarization templates** — built-in presets for meetings, lectures, and quick briefs; define your own in config
+- **Ask your meetings** — ask natural-language questions across all your meeting notes; uses a two-stage LLM pipeline with keyword fallback
 - **One command** — just run `ownscribe`, press Ctrl+C when done, get transcript + summary
 
 ## Requirements
@@ -118,9 +119,26 @@ ownscribe devices                  # list audio devices (uses native CoreAudio w
 ownscribe apps                     # list running apps with PIDs for use with --pid
 ownscribe transcribe recording.wav # transcribe an existing audio file
 ownscribe summarize transcript.md  # summarize an existing transcript
+ownscribe ask "question"           # search your meetings with a natural-language question
 ownscribe config                   # open config file in $EDITOR
 ownscribe cleanup                  # remove ownscribe data from disk
 ```
+
+### Searching Meeting Notes
+
+Use `ask` to search across all your meeting notes with natural-language questions:
+
+```bash
+ownscribe ask "What did Anna say about the deadline?"
+ownscribe ask "budget decisions" --since 2026-01-01
+ownscribe ask "action items from last week" --limit 5
+```
+
+This runs a two-stage pipeline:
+1. **Find** — sends meeting summaries to the LLM to identify which meetings are relevant
+2. **Answer** — sends the full transcripts of relevant meetings to the LLM to produce an answer with quotes
+
+If the LLM finds no relevant meetings, a keyword fallback searches summaries and transcripts directly.
 
 ## Configuration
 
@@ -149,6 +167,7 @@ backend = "ollama"        # "ollama" or "openai"
 model = "mistral"
 host = "http://localhost:11434"
 # template = "meeting"    # "meeting", "lecture", "brief", or a custom name
+# context_size = 0        # 0 = auto-detect from model; set manually for OpenAI-compatible backends
 
 # Custom templates (optional):
 # [templates.my-standup]

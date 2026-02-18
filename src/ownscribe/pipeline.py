@@ -17,6 +17,7 @@ import click
 
 from ownscribe.config import Config
 from ownscribe.progress import PipelineProgress, Spinner
+from ownscribe.summarization import create_summarizer
 
 # A standard WAV file header (RIFF + fmt + data chunk header) is 44 bytes.
 # Files at or below this size contain no audio frames.
@@ -86,15 +87,6 @@ def _create_transcriber(config: Config, progress=None):
     diar_config = config.diarization if config.diarization.enabled else None
     return WhisperXTranscriber(config.transcription, diar_config, progress=progress)
 
-
-def _create_summarizer(config: Config):
-    """Create the appropriate summarizer based on config."""
-    if config.summarization.backend == "openai":
-        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
-        return OpenAISummarizer(config.summarization, config.templates)
-    else:
-        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
-        return OllamaSummarizer(config.summarization, config.templates)
 
 
 def _format_output(config: Config, transcript_result, summary_text: str | None = None) -> tuple[str, str | None]:
@@ -233,7 +225,7 @@ def run_summarize(config: Config, transcript_file: str) -> None:
     """Summarize a transcript file."""
     transcript_text = Path(transcript_file).read_text()
 
-    summarizer = _create_summarizer(config)
+    summarizer = create_summarizer(config)
     if not summarizer.is_available():
         click.echo(
             f"Error: {config.summarization.backend} is not reachable at {config.summarization.host}. "
@@ -295,7 +287,7 @@ def _do_transcribe_and_summarize(
 
         # 3. Summarize
         if sum_enabled:
-            summarizer = _create_summarizer(config)
+            summarizer = create_summarizer(config)
             if not summarizer.is_available():
                 click.echo(
                     f"\nWarning: {config.summarization.backend} is not reachable "

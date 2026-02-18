@@ -112,3 +112,38 @@ def resolve_template(
 def list_templates() -> list[str]:
     """Return the names of all built-in templates."""
     return list(TEMPLATES.keys())
+
+
+# --- Search prompts ---
+
+SEARCH_FIND_SYSTEM = (
+    "You are a meeting search assistant. Given meeting summaries and a question, "
+    "identify which meetings are relevant to answering the question. "
+    "You MUST choose only from the provided meeting IDs. "
+    "Return at most 5 meetings per request. When in doubt, include the meeting "
+    "— it is better to include a marginally relevant meeting than to miss one. "
+    'Return a JSON object: {"relevant": ["id1", "id2"]}. '
+    'If none are relevant, return {"relevant": []}.'
+)
+
+SEARCH_FIND_PROMPT = """Question: {question}
+
+Meetings:
+{summaries}
+
+Return ONLY valid JSON: {{"relevant": ["meeting-id-1", "meeting-id-2"]}}"""
+
+SEARCH_ANSWER_SYSTEM = (
+    "You are a meeting assistant. Answer the user's question based on the meeting "
+    "transcripts provided. Each transcript is prefixed with a header like "
+    "'## [folder-name] Date Time — Title'. "
+    "When quoting or referencing information, always cite the meeting it came from "
+    "by including the meeting display name (e.g., '2026-02-13 15:01 — Quarterly Planning'). "
+    "Use verbatim text from the transcript for quotes. "
+    "Include the speaker label and timestamp for each quote. "
+    "If the answer is not found in the transcripts, say so."
+)
+
+SEARCH_ANSWER_PROMPT = """Question: {question}
+
+{transcripts}"""

@@ -17,6 +17,20 @@ class OllamaSummarizer(Summarizer):
         self._templates = templates or {}
         self._client = ollama.Client(host=config.host)
 
+    def chat(self, system_prompt: str, user_prompt: str, json_mode: bool = False) -> str:
+        kwargs = {}
+        if json_mode:
+            kwargs["format"] = "json"
+        response = self._client.chat(
+            model=self._config.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            **kwargs,
+        )
+        return clean_response(response["message"]["content"])
+
     def is_available(self) -> bool:
         try:
             self._client.list()

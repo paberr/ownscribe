@@ -181,7 +181,7 @@ class TestDoTranscribeAndSummarize:
 
         with (
             mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
-            mock.patch("ownscribe.pipeline._create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
         ):
             _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
 
@@ -206,7 +206,7 @@ class TestDoTranscribeAndSummarize:
 
         with (
             mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
-            mock.patch("ownscribe.pipeline._create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
         ):
             _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
 

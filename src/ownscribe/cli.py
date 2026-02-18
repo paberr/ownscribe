@@ -98,6 +98,19 @@ def cli(
 
 
 @cli.command()
+@click.argument("question")
+@click.option("--since", default=None, help="Only search meetings after this date (YYYY-MM-DD).")
+@click.option("--limit", default=None, type=int, help="Max number of recent meetings to search.")
+@click.pass_context
+def ask(ctx: click.Context, question: str, since: str | None, limit: int | None) -> None:
+    """Ask a question across your meeting notes."""
+    config = ctx.obj["config"]
+    from ownscribe.search import ask as run_ask
+
+    run_ask(config, question, since=since, limit=limit)
+
+
+@cli.command()
 def devices() -> None:
     """List available audio input devices."""
     from ownscribe.audio.coreaudio import CoreAudioRecorder
