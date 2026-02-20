@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from unittest import mock
 
@@ -265,3 +266,153 @@ class TestDoTranscribeAndSummarize:
 
         assert (tmp_path / "transcript.md").exists()
         assert audio_path.exists()
+
+    def test_summarization_failure_preserves_transcript(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.summarization.enabled = True
+        audio_path = tmp_path / "recording.wav"
+        audio_path.touch()
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = self._make_transcript()
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.side_effect = Exception("GPU OOM")
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+        ):
+            _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
+
+        assert (tmp_path / "transcript.md").exists()
+        assert "Hello world." in (tmp_path / "transcript.md").read_text()
+        assert not (tmp_path / "summary.md").exists()
+
+
+class TestRunTranscribeColocation:
+    """Test that run_transcribe saves output alongside the input file."""
+
+    def test_transcript_saved_next_to_audio(self, tmp_path):
+        from ownscribe.pipeline import run_transcribe
+
+        audio_dir = tmp_path / "meetings" / "2026-01-01_1200"
+        audio_dir.mkdir(parents=True)
+        audio_path = audio_dir / "recording.wav"
+        audio_path.touch()
+
+        config = Config()
+        config.output.format = "markdown"
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = TranscriptResult(
+            segments=[Segment(text="Test.", start=0.0, end=1.0)],
+            language="en",
+            duration=1.0,
+        )
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline._check_audio_silence"),
+        ):
+            run_transcribe(config, str(audio_path))
+
+        assert (audio_dir / "transcript.md").exists()
+
+
+class TestRunSummarizeColocation:
+    """Test that run_summarize saves output alongside the input file."""
+
+    def test_summary_saved_next_to_transcript(self, tmp_path):
+        from ownscribe.pipeline import run_summarize
+
+        tx_dir = tmp_path / "meetings" / "2026-01-01_1200"
+        tx_dir.mkdir(parents=True)
+        tx_path = tx_dir / "transcript.md"
+        tx_path.write_text("# Transcript\nHello world.")
+
+        config = Config()
+        config.summarization.enabled = True
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = "test-title"
+
+        with mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer):
+            run_summarize(config, str(tx_path))
+
+        renamed_dir = tx_dir.parent / f"{tx_dir.name}_test-title"
+        assert (renamed_dir / "summary.md").exists()
+
+
+class TestResume:
+    """Test run_resume artifact detection and dispatch."""
+
+    def test_nothing_to_resume(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        (tmp_path / "transcript.md").write_text("hello")
+        (tmp_path / "summary.md").write_text("summary")
+
+        config = Config()
+        run_resume(config, str(tmp_path))
+        # Should exit cleanly without error
+
+    def test_error_no_audio_no_transcript(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        config = Config()
+        with mock.patch("sys.exit", side_effect=SystemExit(1)), contextlib.suppress(SystemExit):
+            run_resume(config, str(tmp_path))
+
+    def test_resumes_summarize_only(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        (tmp_path / "transcript.md").write_text("# Transcript\nHello.")
+
+        config = Config()
+        config.summarization.enabled = True
+
+        with mock.patch("ownscribe.pipeline.run_summarize") as mock_sum:
+            run_resume(config, str(tmp_path))
+            mock_sum.assert_called_once_with(config, str(tmp_path / "transcript.md"))
+
+    def test_resumes_transcribe_and_summarize(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        audio_path = tmp_path / "recording.wav"
+        audio_path.touch()
+
+        config = Config()
+
+        with mock.patch("ownscribe.pipeline._do_transcribe_and_summarize") as mock_ts:
+            run_resume(config, str(tmp_path))
+            mock_ts.assert_called_once_with(config, audio_path, tmp_path)
+
+    def test_finds_non_wav_audio(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        audio_path = tmp_path / "meeting.mp3"
+        audio_path.touch()
+
+        config = Config()
+
+        with mock.patch("ownscribe.pipeline._do_transcribe_and_summarize") as mock_ts:
+            run_resume(config, str(tmp_path))
+            mock_ts.assert_called_once_with(config, audio_path, tmp_path)
+
+    def test_finds_json_transcript(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        (tmp_path / "transcript.json").write_text('{"segments": []}')
+
+        config = Config()
+
+        with mock.patch("ownscribe.pipeline.run_summarize") as mock_sum:
+            run_resume(config, str(tmp_path))
+            mock_sum.assert_called_once_with(config, str(tmp_path / "transcript.json"))

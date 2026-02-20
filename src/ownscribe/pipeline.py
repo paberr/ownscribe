@@ -214,16 +214,18 @@ def run_pipeline(config: Config) -> None:
 
 
 def run_transcribe(config: Config, audio_file: str) -> None:
-    """Transcribe an audio file and output the result."""
-    audio_path = Path(audio_file)
+    """Transcribe an audio file and save the transcript alongside the input."""
+    audio_path = Path(audio_file).resolve()
     _check_audio_silence(audio_path)
-    out_dir = _get_output_dir(config)
+    out_dir = audio_path.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
     _do_transcribe_and_summarize(config, audio_path, out_dir, summarize=False)
 
 
 def run_summarize(config: Config, transcript_file: str) -> None:
-    """Summarize a transcript file."""
-    transcript_text = Path(transcript_file).read_text()
+    """Summarize a transcript file and save the summary alongside the input."""
+    transcript_path = Path(transcript_file).resolve()
+    transcript_text = transcript_path.read_text()
 
     summarizer = create_summarizer(config)
     if not summarizer.is_available():
@@ -236,7 +238,7 @@ def run_summarize(config: Config, transcript_file: str) -> None:
 
     from ownscribe.output.markdown import format_summary
 
-    out_dir = _get_output_dir(config)
+    out_dir = transcript_path.parent
 
     with Spinner(f"Summarizing with {config.summarization.model}"):
         summary = summarizer.summarize(transcript_text)
@@ -271,7 +273,11 @@ def _do_transcribe_and_summarize(
     sum_enabled = summarize and config.summarization.enabled
 
     summary = None
+    summary_str = None
     title_slug = ""
+    sum_unavailable = False
+    sum_failed = False
+
     with PipelineProgress(diarize=diar_enabled, summarize=sum_enabled) as progress:
         try:
             transcriber = _create_transcriber(config, progress=progress)
@@ -285,38 +291,50 @@ def _do_transcribe_and_summarize(
 
         result = transcriber.transcribe(audio_path)
 
-        # 3. Summarize
+        # Save transcript — silent, no echo
+        transcript_str, _ = _format_output(config, result)
+        ext = "json" if config.output.format == "json" else "md"
+        transcript_path = out_dir / f"transcript.{ext}"
+        transcript_path.write_text(transcript_str)
+
         if sum_enabled:
             summarizer = create_summarizer(config)
             if not summarizer.is_available():
-                click.echo(
-                    f"\nWarning: {config.summarization.backend} is not reachable "
-                    f"at {config.summarization.host}. "
-                    "Skipping summarization. Is the server running?",
-                    err=True,
-                )
+                sum_unavailable = True
             else:
-                progress.begin("summarizing")
-                summary = summarizer.summarize(result.full_text)
-                title_slug = _generate_title_slug(summary, summarizer)
-                progress.complete("summarizing")
+                try:
+                    progress.begin("summarizing")
+                    summary = summarizer.summarize(result.full_text)
+                    _, summary_str = _format_output(config, result, summary)
+                    summary_path = out_dir / f"summary.{ext}"
+                    summary_path.write_text(summary_str or summary)
+                    title_slug = _generate_title_slug(summary, summarizer)
+                    progress.complete("summarizing")
+                except Exception:
+                    progress.fail("summarizing")
+                    sum_failed = True
 
-    transcript_str, _ = _format_output(config, result)
-
-    ext = "json" if config.output.format == "json" else "md"
-    transcript_path = out_dir / f"transcript.{ext}"
-    transcript_path.write_text(transcript_str)
+    # --- All user-facing output after TUI exits ---
     click.echo(f"Transcript saved to {transcript_path}")
 
+    if sum_unavailable:
+        click.echo(
+            f"\nWarning: {config.summarization.backend} is not reachable "
+            f"at {config.summarization.host}. "
+            "Skipping summarization. Is the server running?",
+            err=True,
+        )
+    elif sum_failed:
+        click.echo(
+            f"\nWarning: Summarization failed. "
+            f"Transcript is saved at {transcript_path}\n"
+            f"Resume with: ownscribe resume {out_dir}",
+            err=True,
+        )
+
     if summary is not None:
-        _, summary_str = _format_output(config, result, summary)
-
-        summary_path = out_dir / f"summary.{ext}"
-        summary_path.write_text(summary_str or summary)
-        click.echo(f"Summary saved to {summary_path}")
+        click.echo(f"Summary saved to {out_dir / f'summary.{ext}'}")
         click.echo(f"\n{summary_str or summary}")
-
-        # Rename output dir with pre-computed slug (filesystem-only, no LLM call)
         if title_slug:
             new_dir = out_dir.parent / f"{out_dir.name}_{title_slug}"
             try:
@@ -333,3 +351,70 @@ def _do_transcribe_and_summarize(
         if actual_audio_path.exists():
             actual_audio_path.unlink()
             click.echo(f"Recording deleted (keep_recording=false): {actual_audio_path}")
+
+
+_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}
+
+
+def _find_audio(directory: Path) -> Path | None:
+    """Find an audio file in directory, preferring 'recording.wav'."""
+    recording = directory / "recording.wav"
+    if recording.exists():
+        return recording
+    for f in directory.iterdir():
+        if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS:
+            return f
+    return None
+
+
+def _find_transcript(directory: Path) -> Path | None:
+    """Find a transcript file in directory."""
+    for ext in ("md", "json"):
+        path = directory / f"transcript.{ext}"
+        if path.exists():
+            return path
+    return None
+
+
+def _find_summary(directory: Path) -> Path | None:
+    """Find a summary file in directory."""
+    for ext in ("md", "json"):
+        path = directory / f"summary.{ext}"
+        if path.exists():
+            return path
+    return None
+
+
+def run_resume(config: Config, directory: str) -> None:
+    """Resume a partially-completed pipeline in the given directory."""
+    dir_path = Path(directory).resolve()
+    if not dir_path.is_dir():
+        click.echo(f"Error: {dir_path} is not a directory.", err=True)
+        raise SystemExit(1)
+
+    audio = _find_audio(dir_path)
+    transcript = _find_transcript(dir_path)
+    summary = _find_summary(dir_path)
+
+    if transcript and summary:
+        click.echo("Nothing to resume — transcript and summary already exist.")
+        return
+
+    if not audio and not transcript:
+        click.echo(
+            f"Error: No audio or transcript found in {dir_path}.\n"
+            "A recording or transcript is needed to resume.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    if transcript:
+        # Have transcript, missing summary — summarize only
+        click.echo(f"Found transcript: {transcript}")
+        click.echo("Resuming: summarize only.\n")
+        run_summarize(config, str(transcript))
+    else:
+        # Have audio, missing transcript (and summary) — full transcribe + summarize
+        click.echo(f"Found audio: {audio}")
+        click.echo("Resuming: transcribe + summarize.\n")
+        _do_transcribe_and_summarize(config, audio, dir_path)

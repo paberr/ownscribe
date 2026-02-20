@@ -117,8 +117,9 @@ ownscribe --template lecture                  # use the lecture summarization te
 ```bash
 ownscribe devices                  # list audio devices (uses native CoreAudio when available)
 ownscribe apps                     # list running apps with PIDs for use with --pid
-ownscribe transcribe recording.wav # transcribe an existing audio file
-ownscribe summarize transcript.md  # summarize an existing transcript
+ownscribe transcribe recording.wav # transcribe an audio file (saves alongside the input)
+ownscribe summarize transcript.md  # summarize a transcript (saves alongside the input)
+ownscribe resume ./2026-02-20_1736 # resume a failed/partial pipeline in a directory
 ownscribe ask "question"           # search your meetings with a natural-language question
 ownscribe config                   # open config file in $EDITOR
 ownscribe cleanup                  # remove ownscribe data from disk

@@ -89,6 +89,12 @@ class TestSubcommandHelp:
         assert result.exit_code == 0
         assert "Open the configuration file" in result.output
 
+    def test_resume_help(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["resume", "--help"])
+        assert result.exit_code == 0
+        assert "Resume a partially-completed pipeline" in result.output
+
     def test_cleanup_help(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["cleanup", "--help"])

@@ -214,6 +214,12 @@ class PipelineProgress:
                         self._completed.add(s.key)
                         self._progress.pop(s.key, None)
 
+    def fail(self, key: str) -> None:
+        """Mark a step as failed — removes from active without completing."""
+        with self._lock:
+            self._active.discard(key)
+            self._progress.pop(key, None)
+
     def update(self, key: str, fraction: float) -> None:
         with self._lock:
             if key in self._step_map:
@@ -291,6 +297,9 @@ class NullProgress:
         pass
 
     def complete(self, key: str) -> None:
+        pass
+
+    def fail(self, key: str) -> None:
         pass
 
     def update(self, key: str, fraction: float) -> None:
