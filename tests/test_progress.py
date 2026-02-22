@@ -44,6 +44,15 @@ class TestDownloadProgressParsing:
         assert events[-1].percent == 12.0
         assert events[-1].filename == "model.bin"
 
+    def test_writer_ignores_unknown_size_units_without_crashing(self):
+        events = []
+        writer = DownloadProgressWriter(events.append)
+
+        writer.write("model.bin: 10%|#         | 1EiB/2EiB [00:01<00:09]\r")
+        writer.flush()
+
+        assert events == []
+
 
 class TestDownloadProgressFraction:
     def test_prefers_bytes_ratio(self):

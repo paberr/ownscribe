@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import re
 import sys
 import threading
@@ -247,7 +248,12 @@ class DownloadProgressWriter:
             self._buffer = ""
 
     def _consume(self, chunk: str) -> None:
-        if event := parse_download_progress(chunk):
+        try:
+            event = parse_download_progress(chunk)
+        except (ValueError, OverflowError):
+            logging.getLogger(__name__).debug("Ignoring malformed download progress output: %r", chunk, exc_info=True)
+            return
+        if event:
             self._update_fn(event)
 
 
