@@ -222,6 +222,42 @@ def run_transcribe(config: Config, audio_file: str) -> None:
     _do_transcribe_and_summarize(config, audio_path, out_dir, summarize=False)
 
 
+def run_warmup(config: Config) -> None:
+    """Prefetch transcription/diarization models without processing audio."""
+    diar_enabled = config.diarization.enabled and bool(config.diarization.hf_token)
+    hf_token_warning = (
+        config.diarization.enabled and not config.diarization.hf_token
+    )
+
+    with PipelineProgress(diarize=False, summarize=False, transcribe=False) as progress:
+        try:
+            transcriber = _create_transcriber(config, progress=progress)
+        except ImportError:
+            click.echo(
+                "Error: WhisperX is not installed. Install with:\n"
+                "  uv pip install 'ownscribe[transcription]'",
+                err=True,
+            )
+            raise SystemExit(1) from None
+
+        transcriber.prepare_models(language=config.transcription.language or None)
+
+    click.echo(f"Whisper model ready: {config.transcription.model}")
+    if config.transcription.language:
+        click.echo(f"Alignment model ready: {config.transcription.language}")
+    else:
+        click.echo("Alignment model not preloaded (language auto-detect).")
+
+    if diar_enabled:
+        click.echo("Diarization pipeline ready.")
+    elif hf_token_warning:
+        click.echo(
+            "Warning: Diarization enabled but no HF token configured. "
+            "Skipping diarization warmup.",
+            err=True,
+        )
+
+
 def run_summarize(config: Config, transcript_file: str) -> None:
     """Summarize a transcript file and save the summary alongside the input."""
     transcript_path = Path(transcript_file).resolve()

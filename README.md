@@ -97,6 +97,8 @@ This will:
 3. Summarize with your local LLM
 4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMMSS/`
 
+On first run, WhisperX / pyannote may download model files. ownscribe shows a `Preparing models` step and best-effort download progress in the TUI while this happens.
+
 ### Options
 
 ```bash
@@ -117,12 +119,21 @@ ownscribe --template lecture                  # use the lecture summarization te
 ```bash
 ownscribe devices                  # list audio devices (uses native CoreAudio when available)
 ownscribe apps                     # list running apps with PIDs for use with --pid
+ownscribe warmup                   # prefetch WhisperX/pyannote models before a meeting
 ownscribe transcribe recording.wav # transcribe an audio file (saves alongside the input)
 ownscribe summarize transcript.md  # summarize a transcript (saves alongside the input)
 ownscribe resume ./2026-02-20_1736 # resume a failed/partial pipeline in a directory
 ownscribe ask "question"           # search your meetings with a natural-language question
 ownscribe config                   # open config file in $EDITOR
 ownscribe cleanup                  # remove ownscribe data from disk
+```
+
+Use `warmup` ahead of time to avoid first-run model download delays while recording:
+
+```bash
+ownscribe warmup                    # prefetch Whisper model (+ diarization if enabled in config)
+ownscribe warmup --language en      # also prefetch alignment model for English
+ownscribe warmup --with-diarization # force diarization warmup for this run
 ```
 
 ### Searching Meeting Notes

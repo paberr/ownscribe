@@ -17,6 +17,18 @@ _BAR_WIDTH = 20
 _INTERVAL = 0.1
 
 _PROGRESS_RE = re.compile(r"Progress:\s*([\d.]+)%")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_TQDM_RE = re.compile(
+    r"(?:(?P<filename>[^:\r\n]+):\s*)?"
+    r"(?P<percent>[\d.]+)%\|.*?\|\s*"
+    r"(?P<done>[\d.]+)\s*(?P<done_unit>[kKMGTPE]?i?B)\s*/\s*"
+    r"(?P<total>[\d.]+)\s*(?P<total_unit>[kKMGTPE]?i?B)"
+)
+_BYTES_RE = re.compile(
+    r"(?P<done>[\d.]+)\s*(?P<done_unit>[kKMGTPE]?i?B)\s*/\s*"
+    r"(?P<total>[\d.]+)\s*(?P<total_unit>[kKMGTPE]?i?B)"
+)
+_PERCENT_RE = re.compile(r"(?P<percent>[\d.]+)%")
 
 
 class Spinner:
@@ -115,6 +127,130 @@ class ProgressWriter:
         pass
 
 
+@dataclass
+class DownloadProgressEvent:
+    """Best-effort parsed progress for model downloads/preparation."""
+
+    filename: str | None = None
+    percent: float | None = None
+    bytes_done: int | None = None
+    bytes_total: int | None = None
+
+
+def _parse_size_to_bytes(value: str, unit: str) -> int:
+    multipliers = {
+        "B": 1,
+        "KB": 1024,
+        "MB": 1024**2,
+        "GB": 1024**3,
+        "TB": 1024**4,
+        "PB": 1024**5,
+        "KIB": 1024,
+        "MIB": 1024**2,
+        "GIB": 1024**3,
+        "TIB": 1024**4,
+        "PIB": 1024**5,
+    }
+    factor = multipliers.get(unit.strip().upper())
+    if factor is None:
+        raise ValueError(f"Unknown size unit: {unit}")
+    return int(float(value) * factor)
+
+
+def parse_download_progress(text: str) -> DownloadProgressEvent | None:
+    """Parse a tqdm/HF-style progress line into a structured event."""
+    clean = _ANSI_RE.sub("", text).strip()
+    if not clean:
+        return None
+
+    if m := _TQDM_RE.search(clean):
+        filename = (m.group("filename") or "").strip() or None
+        return DownloadProgressEvent(
+            filename=filename,
+            percent=float(m.group("percent")),
+            bytes_done=_parse_size_to_bytes(m.group("done"), m.group("done_unit")),
+            bytes_total=_parse_size_to_bytes(m.group("total"), m.group("total_unit")),
+        )
+
+    if m := _BYTES_RE.search(clean):
+        percent = None
+        if m2 := _PERCENT_RE.search(clean):
+            percent = float(m2.group("percent"))
+        return DownloadProgressEvent(
+            percent=percent,
+            bytes_done=_parse_size_to_bytes(m.group("done"), m.group("done_unit")),
+            bytes_total=_parse_size_to_bytes(m.group("total"), m.group("total_unit")),
+        )
+
+    if m := _PERCENT_RE.search(clean):
+        return DownloadProgressEvent(percent=float(m.group("percent")))
+
+    return None
+
+
+def _human_bytes(value: int) -> str:
+    size = float(value)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def format_download_progress(event: DownloadProgressEvent, *, include_percent: bool = True) -> str:
+    """Format a parsed download progress event for display in the TUI."""
+    parts: list[str] = []
+    if event.filename:
+        parts.append(event.filename)
+    if event.bytes_done is not None and event.bytes_total is not None:
+        parts.append(f"{_human_bytes(event.bytes_done)} / {_human_bytes(event.bytes_total)}")
+    if include_percent and event.percent is not None:
+        parts.append(f"{int(event.percent)}%")
+    return " ".join(parts).strip()
+
+
+def download_event_fraction(event: DownloadProgressEvent) -> float | None:
+    """Convert a parsed download event to a progress-bar fraction."""
+    if event.bytes_done is not None and event.bytes_total and event.bytes_total > 0:
+        return max(0.0, min(1.0, event.bytes_done / event.bytes_total))
+    if event.percent is not None:
+        return max(0.0, min(1.0, event.percent / 100.0))
+    return None
+
+
+class DownloadProgressWriter:
+    """File-like object that parses download progress from captured output."""
+
+    def __init__(self, update_fn: Callable[[DownloadProgressEvent], None]) -> None:
+        self._update_fn = update_fn
+        self._buffer = ""
+
+    def write(self, text: str) -> int:
+        self._buffer += text
+        while True:
+            idx_r = self._buffer.find("\r")
+            idx_n = self._buffer.find("\n")
+            idxs = [idx for idx in (idx_r, idx_n) if idx != -1]
+            if not idxs:
+                break
+            idx = min(idxs)
+            chunk = self._buffer[:idx]
+            self._buffer = self._buffer[idx + 1:]
+            self._consume(chunk)
+        return len(text)
+
+    def flush(self) -> None:
+        if self._buffer:
+            self._consume(self._buffer)
+            self._buffer = ""
+
+    def _consume(self, chunk: str) -> None:
+        if event := parse_download_progress(chunk):
+            self._update_fn(event)
+
+
 # ---------------------------------------------------------------------------
 # Pipeline-level checklist progress
 # ---------------------------------------------------------------------------
@@ -136,8 +272,10 @@ class _Step:
 class PipelineProgress:
     """Full-pipeline checklist display."""
 
-    def __init__(self, *, diarize: bool = False, summarize: bool = False) -> None:
-        steps: list[_Step] = [_Step("transcribing", "Transcribing", indent=0)]
+    def __init__(self, *, diarize: bool = False, summarize: bool = False, transcribe: bool = True) -> None:
+        steps: list[_Step] = [_Step("preparing_models", "Preparing models", indent=0)]
+        if transcribe:
+            steps.append(_Step("transcribing", "Transcribing", indent=0))
         if diarize:
             steps.append(_Step("diarizing", "Diarizing", indent=0))
             steps.extend([
@@ -153,6 +291,7 @@ class PipelineProgress:
         self._active: set[str] = set()
         self._completed: set[str] = set()
         self._progress: dict[str, float] = {}
+        self._details: dict[str, str] = {}
         self._lock = threading.Lock()
         self._lines_rendered = 0
         self._stderr = sys.stderr
@@ -174,6 +313,7 @@ class PipelineProgress:
             for key in list(self._active):
                 self._completed.add(key)
                 self._progress.pop(key, None)
+                self._details.pop(key, None)
             self._active.clear()
         self._render_all(final=True)
 
@@ -190,8 +330,11 @@ class PipelineProgress:
                 if other.indent == step.indent:
                     self._active.discard(other_key)
                     self._completed.add(other_key)
+                    self._progress.pop(other_key, None)
+                    self._details.pop(other_key, None)
             self._active.add(key)
             self._progress.pop(key, None)
+            self._details.pop(key, None)
         # Lazy-start animation thread on first begin()
         if self._thread is None:
             self._stop.clear()
@@ -206,6 +349,7 @@ class PipelineProgress:
             self._active.discard(key)
             self._completed.add(key)
             self._progress.pop(key, None)
+            self._details.pop(key, None)
             # If top-level step, also complete any active sub-steps
             if step.indent == 0:
                 for s in self._steps:
@@ -213,17 +357,28 @@ class PipelineProgress:
                         self._active.discard(s.key)
                         self._completed.add(s.key)
                         self._progress.pop(s.key, None)
+                        self._details.pop(s.key, None)
 
     def fail(self, key: str) -> None:
         """Mark a step as failed — removes from active without completing."""
         with self._lock:
             self._active.discard(key)
             self._progress.pop(key, None)
+            self._details.pop(key, None)
 
     def update(self, key: str, fraction: float) -> None:
         with self._lock:
             if key in self._step_map:
                 self._progress[key] = max(0.0, min(1.0, fraction))
+
+    def set_detail(self, key: str, text: str | None) -> None:
+        with self._lock:
+            if key not in self._step_map:
+                return
+            if text:
+                self._details[key] = text
+            else:
+                self._details.pop(key, None)
 
     def diarization_hook(self, step_name: str, _artifact, **kwargs) -> None:
         """Pyannote-compatible hook callback for diarization progress."""
@@ -251,6 +406,7 @@ class PipelineProgress:
             active = set(self._active)
             completed = set(self._completed)
             progress = dict(self._progress)
+            details = dict(self._details)
 
         # Pick a spinner frame (not needed for final)
         frame = ""
@@ -269,20 +425,29 @@ class PipelineProgress:
                     filled = int(frac * _BAR_WIDTH)
                     bar = _FILLED * filled + _EMPTY * (_BAR_WIDTH - filled)
                     pct = int(frac * 100)
-                    lines.append(f"{indent}{step.label:<20s} [{bar}] {pct:3d}%")
+                    lines.append(f"{indent}{frame} {step.label:<20s} [{bar}] {pct:3d}%")
                 else:
                     lines.append(f"{indent}{frame} {step.label}")
+                if detail := details.get(step.key):
+                    lines.append(f"{indent}  {detail}")
             else:
                 lines.append(f"{indent}\u25cb {step.label}")
 
         # Move cursor up to overwrite previous render
-        if self._lines_rendered > 0:
-            self._stderr.write(f"\033[{self._lines_rendered}A")
+        prev_lines = self._lines_rendered
+        if prev_lines > 0:
+            self._stderr.write(f"\033[{prev_lines}A")
 
-        output = "\n".join(lines)
-        self._stderr.write(f"{output}\033[K\n")
+        # If the render shrinks (e.g. detail line disappears), explicitly clear the
+        # now-stale trailing rows by writing blank cleared lines.
+        render_lines = list(lines)
+        if prev_lines > len(render_lines):
+            render_lines.extend([""] * (prev_lines - len(render_lines)))
+
+        for line in render_lines:
+            self._stderr.write(f"{line}\033[K\n")
         self._stderr.flush()
-        self._lines_rendered = len(lines)
+        self._lines_rendered = len(render_lines)
 
     def _animate(self) -> None:
         while not self._stop.is_set():
@@ -303,6 +468,9 @@ class NullProgress:
         pass
 
     def update(self, key: str, fraction: float) -> None:
+        pass
+
+    def set_detail(self, key: str, text: str | None) -> None:
         pass
 
     def diarization_hook(self, step_name: str, _artifact, **kwargs) -> None:

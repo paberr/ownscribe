@@ -95,6 +95,12 @@ class TestSubcommandHelp:
         assert result.exit_code == 0
         assert "Resume a partially-completed pipeline" in result.output
 
+    def test_warmup_help(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["warmup", "--help"])
+        assert result.exit_code == 0
+        assert "Prefetch WhisperX/pyannote models" in result.output
+
     def test_cleanup_help(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["cleanup", "--help"])
@@ -118,6 +124,19 @@ class TestKeepRecordingFlag:
             assert result.exit_code == 0
             config = mock_run.call_args[0][0]
             assert config.output.keep_recording is True
+
+
+class TestWarmupCommand:
+    def test_warmup_invokes_pipeline_with_overrides(self):
+        runner = CliRunner()
+        with _mock_config(), mock.patch("ownscribe.pipeline.run_warmup") as mock_warmup:
+            result = runner.invoke(cli, ["warmup", "--model", "large-v3", "--language", "de", "--with-diarization"])
+
+        assert result.exit_code == 0
+        config = mock_warmup.call_args[0][0]
+        assert config.transcription.model == "large-v3"
+        assert config.transcription.language == "de"
+        assert config.diarization.enabled is True
 
 
 class TestCleanup:

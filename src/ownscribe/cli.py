@@ -150,6 +150,35 @@ def transcribe(
 
 
 @cli.command()
+@click.option("--model", default=None, help="Whisper model size.")
+@click.option("--language", default=None, help="Language code to prefetch alignment model for (e.g. en, de, fr).")
+@click.option(
+    "--with-diarization/--no-diarization",
+    "with_diarization",
+    default=None,
+    help="Override diarization warmup (defaults to config setting).",
+)
+@click.pass_context
+def warmup(
+    ctx: click.Context,
+    model: str | None,
+    language: str | None,
+    with_diarization: bool | None,
+) -> None:
+    """Prefetch WhisperX/pyannote models to avoid first-run stalls."""
+    config = ctx.obj["config"]
+    if model:
+        config.transcription.model = model
+    if language:
+        config.transcription.language = language
+    if with_diarization is not None:
+        config.diarization.enabled = with_diarization
+
+    from ownscribe.pipeline import run_warmup
+    run_warmup(config)
+
+
+@cli.command()
 @click.argument("file", type=click.Path(exists=True))
 @click.option("--template", default=None, help="Summarization template (meeting, lecture, brief, or custom).")
 @click.pass_context

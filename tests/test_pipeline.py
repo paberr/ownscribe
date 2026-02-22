@@ -294,6 +294,21 @@ class TestDoTranscribeAndSummarize:
         assert not (tmp_path / "summary.md").exists()
 
 
+class TestRunWarmup:
+    def test_run_warmup_calls_prepare_models(self):
+        from ownscribe.pipeline import run_warmup
+
+        config = Config()
+        config.transcription.language = "en"
+
+        mock_transcriber = mock.MagicMock()
+
+        with mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber):
+            run_warmup(config)
+
+        mock_transcriber.prepare_models.assert_called_once_with(language="en")
+
+
 class TestRunTranscribeColocation:
     """Test that run_transcribe saves output alongside the input file."""
 
