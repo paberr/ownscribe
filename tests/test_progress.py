@@ -84,7 +84,7 @@ class TestDownloadProgressFormatting:
 
 class TestPipelineProgressDetails:
     def test_renders_detail_line_for_active_step(self):
-        progress = PipelineProgress(transcribe=False)
+        progress = PipelineProgress(transcribe=False, include_prepare=True)
         progress._stderr = io.StringIO()
         progress.begin("preparing_models")
         progress.set_detail("preparing_models", "Downloading model.bin 12 MB / 100 MB (12%)")
@@ -100,7 +100,7 @@ class TestPipelineProgressDetails:
             progress._thread.join()
 
     def test_detail_clears_on_complete(self):
-        progress = PipelineProgress(transcribe=False)
+        progress = PipelineProgress(transcribe=False, include_prepare=True)
         progress._stderr = io.StringIO()
         progress.begin("preparing_models")
         progress.set_detail("preparing_models", "Downloading...")
@@ -116,7 +116,7 @@ class TestPipelineProgressDetails:
             progress._thread.join()
 
     def test_determinate_active_row_includes_spinner_glyph(self):
-        progress = PipelineProgress(transcribe=False)
+        progress = PipelineProgress(transcribe=False, include_prepare=True)
         progress._stderr = io.StringIO()
         progress.begin("preparing_models")
         progress.update("preparing_models", 0.1)
@@ -133,7 +133,7 @@ class TestPipelineProgressDetails:
             progress._thread.join()
 
     def test_renderer_clears_each_line_and_stale_rows_when_detail_disappears(self):
-        progress = PipelineProgress(transcribe=False)
+        progress = PipelineProgress(transcribe=False, include_prepare=True)
         progress._stderr = io.StringIO()
         progress.begin("preparing_models")
         progress.set_detail("preparing_models", "Downloading...")
@@ -155,3 +155,11 @@ class TestPipelineProgressDetails:
         progress._stop.set()
         if progress._thread is not None:
             progress._thread.join()
+
+    def test_preparing_models_is_not_included_by_default(self):
+        progress = PipelineProgress(transcribe=True)
+        assert "preparing_models" not in progress._step_map
+
+    def test_preparing_models_can_be_enabled_explicitly(self):
+        progress = PipelineProgress(transcribe=False, include_prepare=True)
+        assert "preparing_models" in progress._step_map

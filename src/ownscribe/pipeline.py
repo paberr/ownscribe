@@ -229,7 +229,7 @@ def run_warmup(config: Config) -> None:
         config.diarization.enabled and not config.diarization.hf_token
     )
 
-    with PipelineProgress(diarize=False, summarize=False, transcribe=False) as progress:
+    with PipelineProgress(diarize=False, summarize=False, transcribe=False, include_prepare=True) as progress:
         try:
             transcriber = _create_transcriber(config, progress=progress)
         except ImportError:

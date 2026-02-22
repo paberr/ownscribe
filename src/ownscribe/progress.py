@@ -272,8 +272,17 @@ class _Step:
 class PipelineProgress:
     """Full-pipeline checklist display."""
 
-    def __init__(self, *, diarize: bool = False, summarize: bool = False, transcribe: bool = True) -> None:
-        steps: list[_Step] = [_Step("preparing_models", "Preparing models", indent=0)]
+    def __init__(
+        self,
+        *,
+        diarize: bool = False,
+        summarize: bool = False,
+        transcribe: bool = True,
+        include_prepare: bool = False,
+    ) -> None:
+        steps: list[_Step] = []
+        if include_prepare:
+            steps.append(_Step("preparing_models", "Preparing models", indent=0))
         if transcribe:
             steps.append(_Step("transcribing", "Transcribing", indent=0))
         if diarize:

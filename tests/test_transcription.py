@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import types
 from unittest import mock
 
 import pytest
@@ -152,3 +153,38 @@ class TestDownloadProgressHooks:
         assert progress.updates
         assert progress.updates[0] == ("preparing_models", 0.0)
         assert any(key == "preparing_models" and frac > 0 for key, frac in progress.updates[1:])
+
+    def test_transcribe_inner_does_not_use_preparing_models_step(self):
+        from ownscribe.config import TranscriptionConfig
+        from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
+
+        class _Audio:
+            shape = (16000,)
+
+        fake_whisperx = types.SimpleNamespace(
+            load_audio=lambda _path: _Audio(),
+            align=lambda *args, **kwargs: {"segments": []},
+        )
+
+        progress = _FakeProgress()
+        transcriber = WhisperXTranscriber(TranscriptionConfig(language="en"), None, progress=progress)
+        transcriber._model = mock.MagicMock()
+        transcriber._model.transcribe.return_value = {"segments": [], "language": "en"}
+
+        with (
+            mock.patch.dict("sys.modules", {"whisperx": fake_whisperx}),
+            mock.patch.object(transcriber, "_prepare_transcription_models") as mock_prepare_runtime,
+            mock.patch.object(transcriber, "_load_align_model", return_value=(object(), object())),
+            mock.patch.object(transcriber, "prepare_models") as mock_prepare_models,
+        ):
+            result = transcriber._transcribe_inner(mock.MagicMock())
+
+        mock_prepare_models.assert_not_called()
+        mock_prepare_runtime.assert_called_once_with(
+            language="en",
+            step_key="transcribing",
+            show_deferred_align_note=False,
+        )
+        assert ("begin", "transcribing") in progress.calls
+        assert ("begin", "preparing_models") not in progress.calls
+        assert result.language == "en"

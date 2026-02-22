@@ -308,6 +308,24 @@ class TestRunWarmup:
 
         mock_transcriber.prepare_models.assert_called_once_with(language="en")
 
+    def test_run_warmup_enables_prepare_step_in_progress(self):
+        from ownscribe.pipeline import run_warmup
+
+        config = Config()
+        mock_transcriber = mock.MagicMock()
+        fake_progress = mock.MagicMock()
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline.PipelineProgress") as mock_progress_cls,
+        ):
+            mock_progress_cls.return_value.__enter__.return_value = fake_progress
+            run_warmup(config)
+
+        _, kwargs = mock_progress_cls.call_args
+        assert kwargs["include_prepare"] is True
+        assert kwargs["transcribe"] is False
+
 
 class TestRunTranscribeColocation:
     """Test that run_transcribe saves output alongside the input file."""

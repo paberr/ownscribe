@@ -93,6 +93,28 @@ class WhisperXTranscriber(Transcriber):
     def _capture_prep_output(self, stage_label: str, fn, *args, **kwargs):
         return self._capture_download_output("preparing_models", stage_label, fn, *args, **kwargs)
 
+    def _prepare_transcription_models(
+        self,
+        *,
+        language: str | None,
+        step_key: str,
+        show_deferred_align_note: bool = False,
+    ) -> None:
+        if self._model is None:
+            self._capture_download_output(
+                step_key,
+                f"Loading Whisper model ({self._tx_config.model})",
+                self._load_model,
+            )
+
+        if language:
+            self._load_align_model(language, step_key=step_key)
+        elif show_deferred_align_note:
+            self._set_detail(
+                step_key,
+                "Whisper model ready. Alignment model will load after language detection.",
+            )
+
     def _load_align_model(self, language: str, *, step_key: str = "preparing_models") -> tuple[object, object]:
         import whisperx
 
@@ -130,21 +152,15 @@ class WhisperXTranscriber(Transcriber):
         progress = self._progress
         progress.begin("preparing_models")
         try:
-            if self._model is None:
-                self._capture_prep_output(
-                    f"Loading Whisper model ({self._tx_config.model})",
-                    self._load_model,
-                )
-            else:
+            if self._model is not None:
                 self._set_prepare_detail(f"Whisper model ready ({self._tx_config.model})")
 
             align_language = language or self._tx_config.language or None
-            if align_language:
-                self._load_align_model(align_language)
-            else:
-                self._set_prepare_detail(
-                    "Whisper model ready. Alignment model will load after language detection."
-                )
+            self._prepare_transcription_models(
+                language=align_language,
+                step_key="preparing_models",
+                show_deferred_align_note=True,
+            )
 
             if (
                 self._diar_config
@@ -200,13 +216,19 @@ class WhisperXTranscriber(Transcriber):
         import whisperx
 
         progress = self._progress
-        self.prepare_models(language=self._tx_config.language or None)
 
         devnull = open(os.devnull, "w")  # noqa: SIM115
         try:
             # Outer redirect: catch all stray print() from pyannote/lightning
             with contextlib.redirect_stdout(devnull):
                 progress.begin("transcribing")
+
+                self._prepare_transcription_models(
+                    language=self._tx_config.language or None,
+                    step_key="transcribing",
+                    show_deferred_align_note=False,
+                )
+                self._set_detail("transcribing", None)
 
                 audio = whisperx.load_audio(str(audio_path))
 
