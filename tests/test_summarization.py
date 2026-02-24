@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from ownscribe.config import SummarizationConfig, TemplateConfig
 from ownscribe.summarization.prompts import (
     LECTURE_SUMMARY_SYSTEM,
@@ -404,3 +408,265 @@ class TestOpenAISummarizer:
         assert "<think>" not in result
         assert "## Summary" in result
         assert "Cleaned output." in result
+
+
+# ---------------------------------------------------------------------------
+# LlamaCppSummarizer tests
+# ---------------------------------------------------------------------------
+
+
+def _mock_llm_response(content: str) -> dict:
+    """Build a fake llama-cpp create_chat_completion return value."""
+    return {"choices": [{"message": {"content": content}}]}
+
+
+@pytest.fixture()
+def mock_llama():
+    """Patch llama_cpp.Llama and _ensure_model so no real model is loaded."""
+    llm_instance = MagicMock()
+    with (
+        patch(
+            "ownscribe.summarization.llama_cpp_summarizer._ensure_model",
+            return_value="/fake/model.gguf",
+        ),
+        patch(
+            "ownscribe.summarization.llama_cpp_summarizer.Llama",
+            return_value=llm_instance,
+            create=True,
+        ) as llama_cls,
+        patch(
+            "llama_cpp.Llama",
+            llama_cls,
+            create=True,
+        ),
+    ):
+        yield llm_instance
+
+
+class TestLlamaCppSummarizer:
+    """Test LlamaCppSummarizer.summarize."""
+
+    def test_summarize(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response("## Summary\nMeeting went well.")
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.summarize("Alice: Hello\nBob: Hi")
+
+        assert "## Summary" in result
+        assert "Meeting went well." in result
+        mock_llama.create_chat_completion.assert_called_once()
+
+    def test_summarize_cleans_think_tags(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response(
+            "<think>reasoning</think>\n## Summary\nCleaned."
+        )
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.summarize("transcript")
+
+        assert "<think>" not in result
+        assert "## Summary" in result
+        assert "Cleaned." in result
+
+    def test_is_available(self, mock_llama):
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        assert summarizer.is_available() is True
+
+    def test_is_available_without_llama_cpp(self):
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        with patch.dict("sys.modules", {"llama_cpp": None}):
+            assert summarizer.is_available() is False
+
+
+class TestLlamaCppGenerateTitle:
+    """Test LlamaCppSummarizer.generate_title."""
+
+    def test_generate_title(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response("Q3 Budget Review")
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.generate_title("The meeting covered Q3 budget.")
+
+        assert result == "Q3 Budget Review"
+        call_args = mock_llama.create_chat_completion.call_args
+        assert call_args[1]["messages"][0]["content"] == "You generate short meeting titles."
+        assert "Q3 budget" in call_args[1]["messages"][1]["content"]
+
+    def test_generate_title_strips_think_tags(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response("<think>hmm</think>\nBudget Planning")
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.generate_title("summary text")
+
+        assert "<think>" not in result
+        assert result == "Budget Planning"
+
+
+class TestLlamaCppChat:
+    """Test LlamaCppSummarizer.chat with json_mode and json_schema."""
+
+    def test_chat(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response("Hello!")
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.chat("system", "user")
+
+        assert result == "Hello!"
+        call_kwargs = mock_llama.create_chat_completion.call_args[1]
+        assert "response_format" not in call_kwargs
+
+    def test_chat_json_mode(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response('{"key": "value"}')
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.chat("system", "user", json_mode=True)
+
+        assert result == '{"key": "value"}'
+        call_kwargs = mock_llama.create_chat_completion.call_args[1]
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+
+    def test_chat_json_schema_fallback(self, mock_llama):
+        """When json_schema format fails, should fall back to json_object."""
+        schema = {"type": "object", "properties": {"key": {"type": "string"}}}
+        # First call with schema raises, second with json_object succeeds
+        mock_llama.create_chat_completion.side_effect = [
+            Exception("schema not supported"),
+            _mock_llm_response('{"key": "val"}'),
+        ]
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        result = summarizer.chat("system", "user", json_mode=True, json_schema=schema)
+
+        assert result == '{"key": "val"}'
+        assert mock_llama.create_chat_completion.call_count == 2
+
+
+class TestLlamaCppCustomPrompts:
+    """Test that custom prompts via user-defined templates are passed through."""
+
+    def test_custom_system_and_user_prompt(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response("Custom summary.")
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini", template="pirate")
+        templates = {
+            "pirate": TemplateConfig(
+                system_prompt="You are a pirate.",
+                prompt="Arr! Summarize: {transcript}",
+            ),
+        }
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config, templates)
+        summarizer.summarize("Alice: Hello")
+
+        call_args = mock_llama.create_chat_completion.call_args
+        assert call_args[1]["messages"][0]["content"] == "You are a pirate."
+        assert call_args[1]["messages"][1]["content"] == "Arr! Summarize: Alice: Hello"
+
+
+class TestLlamaCppTemplatePassthrough:
+    """Test that built-in templates are resolved correctly."""
+
+    def test_lecture_template(self, mock_llama):
+        mock_llama.create_chat_completion.return_value = _mock_llm_response("Lecture notes.")
+
+        config = SummarizationConfig(backend="local", model="phi-4-mini", template="lecture")
+
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        summarizer = LlamaCppSummarizer(config)
+        summarizer.summarize("Today we discuss photosynthesis.")
+
+        call_args = mock_llama.create_chat_completion.call_args
+        assert call_args[1]["messages"][0]["content"] == LECTURE_SUMMARY_SYSTEM
+        assert "Today we discuss photosynthesis." in call_args[1]["messages"][1]["content"]
+        assert "Key Concepts" in call_args[1]["messages"][1]["content"]
+
+
+class TestEnsureModel:
+    """Test _ensure_model with various model specifications."""
+
+    def test_hf_prefix_parsing(self):
+        with patch(
+            "huggingface_hub.hf_hub_download",
+            return_value="/fake/path.gguf",
+        ) as mock_dl:
+            from ownscribe.summarization.llama_cpp_summarizer import _ensure_model
+
+            result = _ensure_model("hf:myorg/myrepo/model.gguf")
+
+        mock_dl.assert_called_once_with(repo_id="myorg/myrepo", filename="model.gguf")
+        assert str(result) == "/fake/path.gguf"
+
+    def test_hf_prefix_invalid(self):
+        from ownscribe.summarization.llama_cpp_summarizer import _ensure_model
+
+        with pytest.raises(ValueError, match="Invalid HuggingFace model spec"):
+            _ensure_model("hf:noslash")
+
+    def test_registry_lookup(self):
+        with patch(
+            "huggingface_hub.hf_hub_download",
+            return_value="/fake/phi.gguf",
+        ) as mock_dl:
+            from ownscribe.summarization.llama_cpp_summarizer import _ensure_model
+
+            result = _ensure_model("phi-4-mini")
+
+        mock_dl.assert_called_once_with(
+            repo_id="unsloth/Phi-4-mini-instruct-GGUF",
+            filename="Phi-4-mini-instruct-Q4_K_M.gguf",
+        )
+        assert str(result) == "/fake/phi.gguf"
+
+    def test_direct_path(self, tmp_path):
+        model_file = tmp_path / "my_model.gguf"
+        model_file.touch()
+
+        from ownscribe.summarization.llama_cpp_summarizer import _ensure_model
+
+        result = _ensure_model(str(model_file))
+        assert result == model_file
+
+    def test_unknown_model(self):
+        from ownscribe.summarization.llama_cpp_summarizer import _ensure_model
+
+        with pytest.raises(FileNotFoundError, match="Unknown model"):
+            _ensure_model("nonexistent-model")

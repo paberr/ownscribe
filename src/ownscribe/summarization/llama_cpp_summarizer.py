@@ -43,11 +43,10 @@ def _ensure_model(
         slash_idx = parts.rfind("/")
         if slash_idx == -1:
             raise ValueError(
-                f"Invalid HuggingFace model spec '{model_name}'. "
-                "Expected format: hf:owner/repo/filename.gguf"
+                f"Invalid HuggingFace model spec '{model_name}'. Expected format: hf:owner/repo/filename.gguf"
             )
         repo_id = parts[:slash_idx]
-        filename = parts[slash_idx + 1:]
+        filename = parts[slash_idx + 1 :]
     elif model_name in _MODEL_REGISTRY:
         repo_id, filename = _MODEL_REGISTRY[model_name]
     else:
@@ -78,9 +77,16 @@ def _ensure_model(
 
 @contextlib.contextmanager
 def _suppress_stderr():
-    """Redirect fd 2 to /dev/null to silence C-level stderr (e.g. ggml_metal_init)."""
-    devnull_fd = os.open(os.devnull, os.O_WRONLY)
-    old_fd = os.dup(2)
+    """Redirect fd 2 to /dev/null to silence C-level stderr (e.g. ggml_metal_init).
+
+    Falls back to a no-op if fd manipulation is unavailable.
+    """
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        old_fd = os.dup(2)
+    except OSError:
+        yield
+        return
     os.dup2(devnull_fd, 2)
     try:
         yield
@@ -115,7 +121,7 @@ class LlamaCppSummarizer(Summarizer):
             self._llm = Llama(
                 model_path=str(model_path),
                 n_ctx=8192,
-                n_gpu_layers=-1,  # offload all layers to Metal/CUDA
+                n_gpu_layers=-1,  # auto: offloads to Metal/CUDA when available, falls back to CPU
                 verbose=False,
             )
         return self._llm
@@ -128,20 +134,40 @@ class LlamaCppSummarizer(Summarizer):
         json_schema: dict | None = None,
     ) -> str:
         llm = self._get_llm()
-        kwargs: dict = {}
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
         if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        response = llm.create_chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            **kwargs,
-        )
-        return clean_response(response["choices"][0]["message"]["content"] or "")
+            if json_schema is not None:
+                formats_to_try: list[dict | None] = [
+                    {"type": "json_object", "schema": json_schema},
+                    {"type": "json_object"},
+                    None,
+                ]
+            else:
+                formats_to_try = [{"type": "json_object"}, None]
+        else:
+            formats_to_try = [None]
+
+        for fmt in formats_to_try:
+            try:
+                kwargs: dict = {}
+                if fmt is not None:
+                    kwargs["response_format"] = fmt
+                response = llm.create_chat_completion(messages=messages, **kwargs)
+                return clean_response(response["choices"][0]["message"]["content"] or "")
+            except Exception:
+                continue
+        return ""
 
     def is_available(self) -> bool:
-        return True
+        try:
+            import llama_cpp  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
 
     def summarize(self, transcript_text: str) -> str:
         from ownscribe.summarization.prompts import resolve_template

@@ -116,9 +116,11 @@ def _format_output(config: Config, transcript_result, summary_text: str | None =
     """Format transcript and optional summary. Returns (transcript_str, summary_str)."""
     if config.output.format == "json":
         from ownscribe.output.json_output import format_transcript_json
+
         return format_transcript_json(transcript_result), summary_text
     else:
         from ownscribe.output.markdown import format_summary, format_transcript
+
         tx = format_transcript(transcript_result)
         sm = format_summary(summary_text) if summary_text else None
         return tx, sm
@@ -248,9 +250,7 @@ def run_transcribe(config: Config, audio_file: str) -> None:
 def run_warmup(config: Config) -> None:
     """Prefetch transcription/diarization models without processing audio."""
     diar_enabled = config.diarization.enabled and bool(config.diarization.hf_token)
-    hf_token_warning = (
-        config.diarization.enabled and not config.diarization.hf_token
-    )
+    hf_token_warning = config.diarization.enabled and not config.diarization.hf_token
     local_sum = config.summarization.enabled and config.summarization.backend == "local"
 
     with PipelineProgress(
@@ -264,8 +264,7 @@ def run_warmup(config: Config) -> None:
             transcriber = _create_transcriber(config, progress=progress)
         except ImportError:
             click.echo(
-                "Error: WhisperX is not installed. Install with:\n"
-                "  uv pip install 'ownscribe[transcription]'",
+                "Error: WhisperX is not installed. Install with:\n  uv pip install 'ownscribe[transcription]'",
                 err=True,
             )
             raise SystemExit(1) from None
@@ -292,8 +291,7 @@ def run_warmup(config: Config) -> None:
         click.echo("Diarization pipeline ready.")
     elif hf_token_warning:
         click.echo(
-            "Warning: Diarization enabled but no HF token configured. "
-            "Skipping diarization warmup.",
+            "Warning: Diarization enabled but no HF token configured. Skipping diarization warmup.",
             err=True,
         )
 
@@ -335,10 +333,21 @@ def run_summarize(config: Config, transcript_file: str) -> None:
         progress.begin("summarizing")
         if local_sum:
             progress.begin("downloading_model")
-            _download_summarization_model(
-                config.summarization.model, progress, "downloading_model",
-            )
-            progress.complete("downloading_model")
+            try:
+                _download_summarization_model(
+                    config.summarization.model,
+                    progress,
+                    "downloading_model",
+                )
+                progress.complete("downloading_model")
+            except Exception:
+                progress.fail("downloading_model")
+                click.echo(
+                    f"Error: Failed to download summarization model '{config.summarization.model}'.\n"
+                    "Check your internet connection and try again.",
+                    err=True,
+                )
+                raise SystemExit(1) from None
         summary = summarizer.summarize(transcript_text)
         title_slug = _generate_title_slug(summary, summarizer)
         progress.complete("summarizing")
@@ -388,8 +397,7 @@ def _do_transcribe_and_summarize(
             transcriber = _create_transcriber(config, progress=progress)
         except ImportError:
             click.echo(
-                "Error: WhisperX is not installed. Install with:\n"
-                "  uv pip install 'ownscribe[transcription]'",
+                "Error: WhisperX is not installed. Install with:\n  uv pip install 'ownscribe[transcription]'",
                 err=True,
             )
             raise SystemExit(1) from None
@@ -412,7 +420,9 @@ def _do_transcribe_and_summarize(
                     if local_sum:
                         progress.begin("downloading_model")
                         _download_summarization_model(
-                            config.summarization.model, progress, "downloading_model",
+                            config.summarization.model,
+                            progress,
+                            "downloading_model",
                         )
                         progress.complete("downloading_model")
                     summary = summarizer.summarize(result.full_text)
@@ -520,8 +530,7 @@ def run_resume(config: Config, directory: str) -> None:
 
     if not audio and not transcript:
         click.echo(
-            f"Error: No audio or transcript found in {dir_path}.\n"
-            "A recording or transcript is needed to resume.",
+            f"Error: No audio or transcript found in {dir_path}.\nA recording or transcript is needed to resume.",
             err=True,
         )
         raise SystemExit(1)
