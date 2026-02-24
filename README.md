@@ -174,7 +174,7 @@ device = "auto"           # "auto" (mps if available), "mps", or "cpu"
 [summarization]
 enabled = true
 backend = "local"         # "local" (built-in, no server needed), "ollama", or "openai"
-model = "phi-4-mini"      # local: "phi-4-mini" or path to GGUF; ollama/openai: model name
+model = "phi-4-mini"      # local: "phi-4-mini", path to GGUF, or hf:owner/repo/file.gguf; ollama/openai: model name
 # host = "http://localhost:11434"  # only for ollama/openai backends
 # template = "meeting"    # "meeting", "lecture", "brief", or a custom name
 # context_size = 0        # 0 = auto-detect from model; set manually for OpenAI-compatible backends
