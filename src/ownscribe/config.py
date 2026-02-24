@@ -31,9 +31,9 @@ device = "auto"           # "auto" (mps if available), "mps", or "cpu"
 
 [summarization]
 enabled = true
-backend = "ollama"        # "ollama" or "openai" (for LM Studio, llama.cpp server, etc.)
-model = "mistral"         # model name
-host = "http://localhost:11434"  # ollama: :11434, LM Studio: :1234
+backend = "local"         # "local" (built-in, no server needed), "ollama", or "openai"
+model = "phi-4-mini"      # local: "phi-4-mini" or path to GGUF; ollama/openai: model name
+# host = "http://localhost:11434"  # only for ollama/openai backends
 # template = "meeting"    # built-in: "meeting", "lecture", or "brief"
 # context_size = 0        # 0 = auto-detect from model; set manually for OpenAI-compatible backends
 
@@ -76,8 +76,8 @@ class DiarizationConfig:
 @dataclass
 class SummarizationConfig:
     enabled: bool = True
-    backend: str = "ollama"
-    model: str = "mistral"
+    backend: str = "local"
+    model: str = "phi-4-mini"
     host: str = "http://localhost:11434"
     template: str = ""
     context_size: int = 0

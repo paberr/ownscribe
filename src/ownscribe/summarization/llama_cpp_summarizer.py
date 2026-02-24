@@ -1,0 +1,157 @@
+"""Local summarization via llama-cpp-python."""
+
+from __future__ import annotations
+
+import contextlib
+import logging
+import os
+from collections.abc import Callable
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from ownscribe.progress import DownloadProgressEvent, DownloadProgressWriter
+from ownscribe.summarization.base import Summarizer
+from ownscribe.summarization.prompts import clean_response
+
+if TYPE_CHECKING:
+    from llama_cpp import Llama
+
+    from ownscribe.config import SummarizationConfig, TemplateConfig
+
+logger = logging.getLogger(__name__)
+
+# Short name → (HuggingFace repo, GGUF filename)
+_MODEL_REGISTRY: dict[str, tuple[str, str]] = {
+    "phi-4-mini": (
+        "unsloth/Phi-4-mini-instruct-GGUF",
+        "Phi-4-mini-instruct-Q4_K_M.gguf",
+    ),
+}
+
+
+def _ensure_model(
+    model_name: str,
+    on_progress: Callable[[DownloadProgressEvent], None] | None = None,
+) -> Path:
+    """Download the GGUF model if not already cached. Returns the local path."""
+    from huggingface_hub import hf_hub_download
+
+    if model_name not in _MODEL_REGISTRY:
+        # Treat as a direct path to a GGUF file
+        path = Path(model_name).expanduser()
+        if path.exists():
+            return path
+        raise FileNotFoundError(
+            f"Unknown model '{model_name}'. "
+            f"Available: {', '.join(_MODEL_REGISTRY)} or provide a path to a GGUF file."
+        )
+
+    repo_id, filename = _MODEL_REGISTRY[model_name]
+    try:
+        if on_progress is not None:
+            writer = DownloadProgressWriter(on_progress)
+            with redirect_stdout(writer), redirect_stderr(writer):
+                path = Path(hf_hub_download(repo_id=repo_id, filename=filename))
+            writer.flush()
+            return path
+        return Path(hf_hub_download(repo_id=repo_id, filename=filename))
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to download model '{model_name}' from {repo_id}: {exc}\n"
+            "Check your internet connection and try again."
+        ) from exc
+
+
+@contextlib.contextmanager
+def _suppress_stderr():
+    """Redirect fd 2 to /dev/null to silence C-level stderr (e.g. ggml_metal_init)."""
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    old_fd = os.dup(2)
+    os.dup2(devnull_fd, 2)
+    try:
+        yield
+    finally:
+        os.dup2(old_fd, 2)
+        os.close(devnull_fd)
+        os.close(old_fd)
+
+
+class LlamaCppSummarizer(Summarizer):
+    """Summarizes transcripts using a local GGUF model via llama-cpp-python."""
+
+    def __init__(
+        self,
+        config: SummarizationConfig,
+        templates: dict[str, TemplateConfig] | None = None,
+    ) -> None:
+        self._config = config
+        self._templates = templates or {}
+        self._llm: Llama | None = None
+
+    def _get_llm(self) -> Llama:
+        """Lazy-load the model on first use."""
+        if self._llm is not None:
+            return self._llm
+
+        from llama_cpp import Llama
+
+        model_path = _ensure_model(self._config.model)
+        logger.info("Loading model from %s", model_path)
+        with _suppress_stderr():
+            self._llm = Llama(
+                model_path=str(model_path),
+                n_ctx=8192,
+                n_gpu_layers=-1,  # offload all layers to Metal/CUDA
+                verbose=False,
+            )
+        return self._llm
+
+    def chat(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_mode: bool = False,
+        json_schema: dict | None = None,
+    ) -> str:
+        llm = self._get_llm()
+        kwargs: dict = {}
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            **kwargs,
+        )
+        return clean_response(response["choices"][0]["message"]["content"] or "")
+
+    def is_available(self) -> bool:
+        return True
+
+    def summarize(self, transcript_text: str) -> str:
+        from ownscribe.summarization.prompts import resolve_template
+
+        system, prompt = resolve_template(self._config.template, self._templates)
+        user = prompt.format(transcript=transcript_text)
+        llm = self._get_llm()
+        response = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return clean_response(response["choices"][0]["message"]["content"] or "")
+
+    def generate_title(self, summary_text: str) -> str:
+        from ownscribe.summarization.prompts import TITLE_PROMPT, TITLE_SYSTEM
+
+        llm = self._get_llm()
+        response = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": TITLE_SYSTEM},
+                {"role": "user", "content": TITLE_PROMPT.format(summary=summary_text)},
+            ],
+        )
+        return clean_response(response["choices"][0]["message"]["content"] or "").strip()

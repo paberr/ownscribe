@@ -285,6 +285,7 @@ class PipelineProgress:
         summarize: bool = False,
         transcribe: bool = True,
         include_prepare: bool = False,
+        download_summarizer: bool = False,
     ) -> None:
         steps: list[_Step] = []
         if include_prepare:
@@ -301,6 +302,10 @@ class PipelineProgress:
             ])
         if summarize:
             steps.append(_Step("summarizing", "Summarizing", indent=0))
+            if download_summarizer:
+                steps.append(_Step("downloading_model", "Downloading model", indent=1))
+        elif download_summarizer:
+            steps.append(_Step("downloading_model", "Downloading summarization model", indent=0))
         self._steps = steps
         self._step_map: dict[str, _Step] = {s.key: s for s in steps}
         self._active: set[str] = set()

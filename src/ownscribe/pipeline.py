@@ -16,7 +16,12 @@ from pathlib import Path
 import click
 
 from ownscribe.config import Config
-from ownscribe.progress import PipelineProgress, Spinner
+from ownscribe.progress import (
+    DownloadProgressEvent,
+    PipelineProgress,
+    download_event_fraction,
+    format_download_progress,
+)
 from ownscribe.summarization import create_summarizer
 
 # A standard WAV file header (RIFF + fmt + data chunk header) is 44 bytes.
@@ -87,6 +92,24 @@ def _create_transcriber(config: Config, progress=None):
     diar_config = config.diarization if config.diarization.enabled else None
     return WhisperXTranscriber(config.transcription, diar_config, progress=progress)
 
+
+def _download_summarization_model(
+    model_name: str,
+    progress: PipelineProgress,
+    step_key: str,
+) -> Path:
+    """Download the summarization GGUF model, feeding progress into the TUI."""
+    from ownscribe.summarization.llama_cpp_summarizer import _ensure_model
+
+    def _on_progress(event: DownloadProgressEvent) -> None:
+        fraction = download_event_fraction(event)
+        if fraction is not None:
+            progress.update(step_key, fraction)
+        formatted = format_download_progress(event, include_percent=fraction is None)
+        if formatted:
+            progress.set_detail(step_key, formatted)
+
+    return _ensure_model(model_name, on_progress=_on_progress)
 
 
 def _format_output(config: Config, transcript_result, summary_text: str | None = None) -> tuple[str, str | None]:
@@ -228,8 +251,15 @@ def run_warmup(config: Config) -> None:
     hf_token_warning = (
         config.diarization.enabled and not config.diarization.hf_token
     )
+    local_sum = config.summarization.enabled and config.summarization.backend == "local"
 
-    with PipelineProgress(diarize=False, summarize=False, transcribe=False, include_prepare=True) as progress:
+    with PipelineProgress(
+        diarize=False,
+        summarize=False,
+        transcribe=False,
+        include_prepare=True,
+        download_summarizer=local_sum,
+    ) as progress:
         try:
             transcriber = _create_transcriber(config, progress=progress)
         except ImportError:
@@ -241,6 +271,16 @@ def run_warmup(config: Config) -> None:
             raise SystemExit(1) from None
 
         transcriber.prepare_models(language=config.transcription.language or None)
+
+        if local_sum:
+            progress.begin("downloading_model")
+            try:
+                _download_summarization_model(config.summarization.model, progress, "downloading_model")
+                progress.complete("downloading_model")
+            except Exception as exc:
+                progress.fail("downloading_model")
+                click.echo(f"Error: {exc}", err=True)
+                raise SystemExit(1) from None
 
     click.echo(f"Whisper model ready: {config.transcription.model}")
     if config.transcription.language:
@@ -257,6 +297,9 @@ def run_warmup(config: Config) -> None:
             err=True,
         )
 
+    if local_sum:
+        click.echo(f"Summarization model ready: {config.summarization.model}")
+
 
 def run_summarize(config: Config, transcript_file: str) -> None:
     """Summarize a transcript file and save the summary alongside the input."""
@@ -265,20 +308,40 @@ def run_summarize(config: Config, transcript_file: str) -> None:
 
     summarizer = create_summarizer(config)
     if not summarizer.is_available():
-        click.echo(
-            f"Error: {config.summarization.backend} is not reachable at {config.summarization.host}. "
-            "Is the server running?",
-            err=True,
-        )
+        if config.summarization.backend == "local":
+            click.echo(
+                f"Error: Local summarization model '{config.summarization.model}' is not available.",
+                err=True,
+            )
+        else:
+            click.echo(
+                f"Error: {config.summarization.backend} is not reachable at {config.summarization.host}. "
+                "Is the server running?",
+                err=True,
+            )
         raise SystemExit(1)
 
     from ownscribe.output.markdown import format_summary
 
     out_dir = transcript_path.parent
+    local_sum = config.summarization.backend == "local"
 
-    with Spinner(f"Summarizing with {config.summarization.model}"):
+    with PipelineProgress(
+        transcribe=False,
+        diarize=False,
+        summarize=True,
+        download_summarizer=local_sum,
+    ) as progress:
+        progress.begin("summarizing")
+        if local_sum:
+            progress.begin("downloading_model")
+            _download_summarization_model(
+                config.summarization.model, progress, "downloading_model",
+            )
+            progress.complete("downloading_model")
         summary = summarizer.summarize(transcript_text)
         title_slug = _generate_title_slug(summary, summarizer)
+        progress.complete("summarizing")
 
     summary_md = format_summary(summary)
     summary_path = out_dir / "summary.md"
@@ -314,7 +377,13 @@ def _do_transcribe_and_summarize(
     sum_unavailable = False
     sum_failed = False
 
-    with PipelineProgress(diarize=diar_enabled, summarize=sum_enabled) as progress:
+    local_sum = sum_enabled and config.summarization.backend == "local"
+
+    with PipelineProgress(
+        diarize=diar_enabled,
+        summarize=sum_enabled,
+        download_summarizer=local_sum,
+    ) as progress:
         try:
             transcriber = _create_transcriber(config, progress=progress)
         except ImportError:
@@ -340,6 +409,12 @@ def _do_transcribe_and_summarize(
             else:
                 try:
                     progress.begin("summarizing")
+                    if local_sum:
+                        progress.begin("downloading_model")
+                        _download_summarization_model(
+                            config.summarization.model, progress, "downloading_model",
+                        )
+                        progress.complete("downloading_model")
                     summary = summarizer.summarize(result.full_text)
                     _, summary_str = _format_output(config, result, summary)
                     summary_path = out_dir / f"summary.{ext}"
@@ -354,12 +429,19 @@ def _do_transcribe_and_summarize(
     click.echo(f"Transcript saved to {transcript_path}")
 
     if sum_unavailable:
-        click.echo(
-            f"\nWarning: {config.summarization.backend} is not reachable "
-            f"at {config.summarization.host}. "
-            "Skipping summarization. Is the server running?",
-            err=True,
-        )
+        if config.summarization.backend == "local":
+            click.echo(
+                f"\nWarning: Local summarization model '{config.summarization.model}' is not available. "
+                "Skipping summarization.",
+                err=True,
+            )
+        else:
+            click.echo(
+                f"\nWarning: {config.summarization.backend} is not reachable "
+                f"at {config.summarization.host}. "
+                "Skipping summarization. Is the server running?",
+                err=True,
+            )
     elif sum_failed:
         click.echo(
             f"\nWarning: Summarization failed. "

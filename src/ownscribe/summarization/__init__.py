@@ -9,7 +9,11 @@ if TYPE_CHECKING:
 
 def create_summarizer(config: Config) -> Summarizer:
     """Create the appropriate summarizer based on config."""
-    if config.summarization.backend == "openai":
+    if config.summarization.backend == "local":
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+
+        return LlamaCppSummarizer(config.summarization, config.templates)
+    elif config.summarization.backend == "openai":
         from ownscribe.summarization.openai_summarizer import OpenAISummarizer
 
         return OpenAISummarizer(config.summarization, config.templates)

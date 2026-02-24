@@ -23,7 +23,7 @@ Each stage has a base class in its subpackage and one or more implementations:
 
 - **Audio** (`audio/base.py`): `CoreAudioRecorder` (macOS, wraps a Swift binary in `swift/`) and `SoundDeviceRecorder` (cross-platform fallback). Selected in `pipeline.py:_create_recorder()`.
 - **Transcription** (`transcription/base.py`): `WhisperXTranscriber` (single impl). Data models (`Segment`, `Word`, `TranscriptResult`) live in `transcription/models.py`.
-- **Summarization** (`summarization/base.py`): `OllamaSummarizer` and `OpenAISummarizer`. Factory is `summarization/__init__.py:create_summarizer()` — used by both `pipeline.py` and `search.py`.
+- **Summarization** (`summarization/base.py`): `LlamaCppSummarizer` (default, local inference via `llama-cpp-python`), `OllamaSummarizer`, and `OpenAISummarizer`. Factory is `summarization/__init__.py:create_summarizer()` — used by both `pipeline.py` and `search.py`.
 - **Output** (`output/`): `markdown.py` and `json_output.py`, selected by `config.output.format`.
 
 ### Key modules
@@ -51,5 +51,5 @@ Each stage has a base class in its subpackage and one or more implementations:
 
 - Python 3.12+. Ruff with line-length 120.
 - `from __future__ import annotations` in all modules.
-- Lazy imports for heavy dependencies (whisperx, ollama, openai) — imported inside functions, not at module level.
+- Lazy imports for heavy dependencies (whisperx, ollama, openai, llama_cpp) — imported inside functions, not at module level.
 - Helper functions return data; orchestrator functions (`ask()`, `run_pipeline()`) handle all `click.echo` output.

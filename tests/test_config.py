@@ -70,7 +70,7 @@ class TestMergeToml:
         assert merged.transcription.model == "small"
         # Other sections unchanged
         assert merged.audio.backend == "coreaudio"
-        assert merged.summarization.backend == "ollama"
+        assert merged.summarization.backend == "local"
 
     def test_mic_settings_from_toml(self):
         cfg = Config()

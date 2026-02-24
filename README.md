@@ -32,7 +32,7 @@ All audio, transcripts, and summaries remain local.
 - **WhisperX transcription** — fast, accurate speech-to-text with word-level timestamps
 - **Speaker diarization** — optional speaker identification via pyannote (requires HuggingFace token)
 - **Pipeline progress** — live checklist showing transcription, diarization sub-steps, and summarization progress
-- **Local LLM summarization** — structured meeting notes via Ollama, LM Studio, or any OpenAI-compatible server
+- **Local LLM summarization** — structured meeting notes with a built-in model (Phi-4-mini); also supports Ollama, LM Studio, or any OpenAI-compatible server
 - **Summarization templates** — built-in presets for meetings, lectures, and quick briefs; define your own in config
 - **Ask your meetings** — ask natural-language questions across all your meeting notes; uses a two-stage LLM pipeline with keyword fallback
   <br><img src="docs/demo-ask.gif" alt="ownscribe ask demo" width="700">
@@ -45,10 +45,8 @@ All audio, transcripts, and summaries remain local.
 - [uv](https://docs.astral.sh/uv/)
 - [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
 - Xcode Command Line Tools (`xcode-select --install`)
-- One of:
-  - [Ollama](https://ollama.ai) — `brew install ollama`
-  - [LM Studio](https://lmstudio.ai)
-  - Any OpenAI-compatible local server
+
+Summarization works out of the box — a local model (Phi-4-mini, ~2.4 GB) downloads automatically on first run. Optionally, you can use [Ollama](https://ollama.ai), [LM Studio](https://lmstudio.ai), or any OpenAI-compatible server instead (see [Configuration](#configuration)).
 
 Works with any app that outputs audio through Core Audio (Zoom, Teams, Meet, etc.).
 
@@ -81,9 +79,6 @@ bash swift/build.sh
 
 # Install with transcription support
 uv sync --extra transcription
-
-# Pull a model for summarization (if using Ollama)
-ollama pull mistral
 ```
 
 ## Usage
@@ -100,7 +95,7 @@ This will:
 3. Summarize with your local LLM
 4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMMSS/`
 
-On first run, WhisperX / pyannote may download model files. ownscribe shows a `Preparing models` step and best-effort download progress in the TUI while this happens.
+On first run, WhisperX / pyannote and the summarization model may download model files. ownscribe shows a `Preparing models` step and best-effort download progress in the TUI while this happens. Use `ownscribe warmup` to pre-download all models.
 
 ### Options
 
@@ -178,9 +173,9 @@ device = "auto"           # "auto" (mps if available), "mps", or "cpu"
 
 [summarization]
 enabled = true
-backend = "ollama"        # "ollama" or "openai"
-model = "mistral"
-host = "http://localhost:11434"
+backend = "local"         # "local" (built-in, no server needed), "ollama", or "openai"
+model = "phi-4-mini"      # local: "phi-4-mini" or path to GGUF; ollama/openai: model name
+# host = "http://localhost:11434"  # only for ollama/openai backends
 # template = "meeting"    # "meeting", "lecture", "brief", or a custom name
 # context_size = 0        # 0 = auto-detect from model; set manually for OpenAI-compatible backends
 
@@ -239,6 +234,7 @@ ownscribe builds on some excellent open-source projects:
 - [WhisperX](https://github.com/m-bain/whisperX) — fast speech recognition with word-level timestamps and speaker diarization
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — CTranslate2-based Whisper inference
 - [pyannote.audio](https://github.com/pyannote/pyannote-audio) — speaker diarization
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) / [llama-cpp-python](https://github.com/abetlen/llama-cpp-python) — local LLM inference
 - [Ollama](https://ollama.ai) — local LLM serving
 - [Click](https://click.palletsprojects.com) — CLI framework
 

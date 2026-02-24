@@ -53,7 +53,7 @@ A big difference to cloud-based apps is that those usually connect to meetings d
 Currently, diarization produces anonymous labels (`SPEAKER_00`, `SPEAKER_01`). Allow users to map these to real names, either interactively after transcription or via a pre-configured mapping.
 
 ### Additional LLM backends
-Add support for more summarization backends beyond Ollama and OpenAI-compatible servers — for example, Anthropic, Google, or local inference via llama.cpp directly. See `src/ownscribe/summarization/base.py` for the summarizer interface.
+Add support for more summarization backends beyond the built-in local model, Ollama, and OpenAI-compatible servers — for example, Anthropic or Google. See `src/ownscribe/summarization/base.py` for the summarizer interface.
 
 ### Improved diarization
 The current diarization works well for 2-3 speakers but can struggle with larger meetings. Investigate better models or post-processing to improve accuracy for many-participant calls.

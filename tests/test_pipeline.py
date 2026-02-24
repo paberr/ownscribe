@@ -183,6 +183,7 @@ class TestDoTranscribeAndSummarize:
         with (
             mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
             mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
         ):
             _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
 
@@ -286,6 +287,7 @@ class TestDoTranscribeAndSummarize:
         with (
             mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
             mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
         ):
             _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
 
@@ -303,7 +305,10 @@ class TestRunWarmup:
 
         mock_transcriber = mock.MagicMock()
 
-        with mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber):
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
             run_warmup(config)
 
         mock_transcriber.prepare_models.assert_called_once_with(language="en")
@@ -318,6 +323,7 @@ class TestRunWarmup:
         with (
             mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
             mock.patch("ownscribe.pipeline.PipelineProgress") as mock_progress_cls,
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
         ):
             mock_progress_cls.return_value.__enter__.return_value = fake_progress
             run_warmup(config)
@@ -325,6 +331,44 @@ class TestRunWarmup:
         _, kwargs = mock_progress_cls.call_args
         assert kwargs["include_prepare"] is True
         assert kwargs["transcribe"] is False
+        assert kwargs["download_summarizer"] is True
+
+    def test_run_warmup_downloads_summarizer_with_progress(self):
+        from ownscribe.pipeline import run_warmup
+
+        config = Config()
+        config.summarization.enabled = True
+        config.summarization.backend = "local"
+        config.summarization.model = "phi-4-mini"
+
+        mock_transcriber = mock.MagicMock()
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model") as mock_ensure,
+        ):
+            run_warmup(config)
+
+        mock_ensure.assert_called_once()
+        _, kwargs = mock_ensure.call_args
+        assert kwargs.get("on_progress") is not None
+
+    def test_run_warmup_skips_summarizer_download_when_not_local(self):
+        from ownscribe.pipeline import run_warmup
+
+        config = Config()
+        config.summarization.enabled = True
+        config.summarization.backend = "ollama"
+
+        mock_transcriber = mock.MagicMock()
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model") as mock_ensure,
+        ):
+            run_warmup(config)
+
+        mock_ensure.assert_not_called()
 
 
 class TestRunTranscribeColocation:
@@ -376,7 +420,10 @@ class TestRunSummarizeColocation:
         mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
         mock_summarizer.generate_title.return_value = "test-title"
 
-        with mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer):
+        with (
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
             run_summarize(config, str(tx_path))
 
         renamed_dir = tx_dir.parent / f"{tx_dir.name}_test-title"
