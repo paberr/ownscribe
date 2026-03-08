@@ -168,9 +168,11 @@ def run_pipeline(config: Config) -> None:
         hints.append("Press 'm' to mute/unmute mic.")
     silence_timeout = config.audio.silence_timeout
     if silence_timeout > 0:
-        mins_timeout = silence_timeout // 60
-        if mins_timeout > 0:
-            hints.append(f"Auto-stops after {mins_timeout}m of silence.")
+        mins, secs = divmod(int(silence_timeout), 60)
+        if mins > 0 and secs > 0:
+            hints.append(f"Auto-stops after {mins}m {secs}s of silence.")
+        elif mins > 0:
+            hints.append(f"Auto-stops after {mins}m of silence.")
         else:
             hints.append(f"Auto-stops after {silence_timeout}s of silence.")
     hints.append("Press Ctrl+C to stop.")
@@ -245,8 +247,13 @@ def run_pipeline(config: Config) -> None:
     click.echo(f"Audio saved to {audio_path}\n")
 
     # Check for silent audio before spending time on transcription
-    # Skip if the recorder already reported a silence warning (CoreAudio helper)
-    if not getattr(recorder, "silence_warning", False):
+    if getattr(recorder, "silence_warning", False):
+        click.echo(
+            "Warning: audio may be silent — check Screen Recording permissions "
+            "(System Settings > Privacy & Security > Screen Recording).",
+            err=True,
+        )
+    else:
         _check_audio_silence(audio_path)
 
     # 2. Transcribe

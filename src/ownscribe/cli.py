@@ -46,7 +46,7 @@ def _dir_size(path: str) -> str:
 )
 @click.option("--template", default=None, help="Summarization template (meeting, lecture, brief, or custom).")
 @click.option(
-    "--silence-timeout", default=None, type=int,
+    "--silence-timeout", default=None, type=click.IntRange(min=0),
     help="Seconds of silence before auto-stopping recording (0 to disable).",
 )
 @click.pass_context

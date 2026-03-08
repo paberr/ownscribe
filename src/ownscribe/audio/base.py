@@ -30,6 +30,6 @@ class AudioRecorder(abc.ABC):
         return False
 
     @property
+    @abc.abstractmethod
     def is_recording(self) -> bool:
         """Whether the recorder is still actively recording."""
-        return True

@@ -23,6 +23,10 @@ class TestBaseClassMuteDefaults:
             def is_available(self):
                 return True
 
+            @property
+            def is_recording(self):
+                return True
+
         recorder = DummyRecorder()
         recorder.toggle_mute()  # should not raise
 
@@ -35,6 +39,10 @@ class TestBaseClassMuteDefaults:
                 pass
 
             def is_available(self):
+                return True
+
+            @property
+            def is_recording(self):
                 return True
 
         recorder = DummyRecorder()

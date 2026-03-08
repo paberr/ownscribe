@@ -7,6 +7,26 @@ import AppKit
 import CoreAudio
 import AudioToolbox
 
+// MARK: - Constants
+
+/// Minimum peak amplitude to consider microphone audio "loud" (silence timeout).
+private let kMicLoudThreshold: Float = 1e-2
+/// Minimum peak amplitude to consider system audio "loud" (silence timeout).
+private let kSystemLoudThreshold: Float = 1e-4
+
+/// Compute peak amplitude across all channels of float audio data.
+func computePeakLevel(in channelData: UnsafePointer<UnsafeMutablePointer<Float>>,
+               channels: Int, frames: Int) -> Float {
+    var peak: Float = 0
+    for ch in 0..<channels {
+        for i in 0..<frames {
+            let v = abs(channelData[ch][i])
+            if v > peak { peak = v }
+        }
+    }
+    return peak
+}
+
 // MARK: - Mic Capture via AVAudioEngine
 
 class MicCapture {
@@ -85,16 +105,10 @@ class MicCapture {
             }
             // Track peak level for silence timeout (muted mic = silence)
             if !muted, let channelData = buffer.floatChannelData {
-                let channels = Int(buffer.format.channelCount)
-                let frames = Int(buffer.frameLength)
-                var peak: Float = 0
-                for ch in 0..<channels {
-                    for i in 0..<frames {
-                        let v = abs(channelData[ch][i])
-                        if v > peak { peak = v }
-                    }
-                }
-                if peak > 1e-2 {
+                let peak = computePeakLevel(in: channelData,
+                                     channels: Int(buffer.format.channelCount),
+                                     frames: Int(buffer.frameLength))
+                if peak > kMicLoudThreshold {
                     os_unfair_lock_lock(&self._lastLoudTimeLock)
                     self._lastLoudTime = DispatchTime.now().uptimeNanoseconds
                     os_unfair_lock_unlock(&self._lastLoudTimeLock)
@@ -286,9 +300,11 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
 
         fputs("Recording system audio to \(outputPath)... Press Ctrl+C to stop.\n", stderr)
 
-        // Start silence timeout timer if configured
+        // Start silence timeout timer if configured.
+        // Checks every 1s whether both system audio and mic (if active) have been
+        // quiet longer than silenceTimeout. Uses the most recent "loud" timestamp
+        // from either source so that activity on either channel prevents auto-stop.
         if silenceTimeout > 0 {
-
             let timer = DispatchSource.makeTimerSource(queue: .main)
             timer.schedule(deadline: .now() + 1, repeating: 1.0)
             timer.setEventHandler { [weak self] in
@@ -372,21 +388,13 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         totalFrames += Int64(frameCount)
 
         // Peak detection on float channel data
-        var bufferPeak: Float = 0.0
-        if let channelData = pcmBuffer.floatChannelData {
-            let channelCount = Int(sampleFormat.channelCount)
-            for ch in 0..<channelCount {
-                let samples = channelData[ch]
-                for i in 0..<Int(frameCount) {
-                    let absVal = abs(samples[i])
-                    if absVal > bufferPeak { bufferPeak = absVal }
-                }
-            }
-        }
-        if bufferPeak > peakLevel { peakLevel = bufferPeak }
+        let bufferPeak: Float = pcmBuffer.floatChannelData.map {
+            computePeakLevel(in: $0, channels: Int(sampleFormat.channelCount), frames: Int(frameCount))
+        } ?? 0.0
+        if bufferPeak > self.peakLevel { self.peakLevel = bufferPeak }
 
         // Update last loud time for silence timeout
-        if bufferPeak > 1e-4 {
+        if bufferPeak > kSystemLoudThreshold {
             os_unfair_lock_lock(&lastLoudTimeLock)
             lastLoudTime = DispatchTime.now().uptimeNanoseconds
             os_unfair_lock_unlock(&lastLoudTimeLock)
@@ -768,6 +776,10 @@ func main() {
                 i += 1
                 guard i < args.count, let val = TimeInterval(args[i]) else {
                     fputs("Error: --silence-timeout requires a number of seconds\n", stderr)
+                    exit(1)
+                }
+                if val < 0 {
+                    fputs("Error: --silence-timeout must be zero (disabled) or a positive number of seconds\n", stderr)
                     exit(1)
                 }
                 silenceTimeout = val
