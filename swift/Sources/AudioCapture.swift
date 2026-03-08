@@ -19,10 +19,10 @@ class MicCapture {
     private var _muteLock = os_unfair_lock_s()
 
     // Level tracking for silence timeout (mirrors SystemAudioCapture pattern)
-    private var _lastLoudTime = Date()
+    private var _lastLoudTime: UInt64 = DispatchTime.now().uptimeNanoseconds
     private var _lastLoudTimeLock = os_unfair_lock_s()
 
-    var lastLoudTime: Date {
+    var lastLoudTime: UInt64 {
         os_unfair_lock_lock(&_lastLoudTimeLock)
         defer { os_unfair_lock_unlock(&_lastLoudTimeLock) }
         return _lastLoudTime
@@ -96,7 +96,7 @@ class MicCapture {
                 }
                 if peak > 1e-2 {
                     os_unfair_lock_lock(&self._lastLoudTimeLock)
-                    self._lastLoudTime = Date()
+                    self._lastLoudTime = DispatchTime.now().uptimeNanoseconds
                     os_unfair_lock_unlock(&self._lastLoudTimeLock)
                 }
             }
@@ -197,7 +197,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
     var silenceTimeout: TimeInterval = 0  // seconds; 0 = disabled
     var onSilenceTimeout: (() -> Void)?
     var micCapture: MicCapture?  // checked by silence timer
-    private var lastLoudTime = Date()
+    private var lastLoudTime: UInt64 = DispatchTime.now().uptimeNanoseconds
     private var lastLoudTimeLock = os_unfair_lock_s()
     private var silenceTimer: DispatchSourceTimer?
 
@@ -278,7 +278,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
 
         // Initialize last-loud time before starting capture (no lock needed — callbacks haven't started)
         if silenceTimeout > 0 {
-            lastLoudTime = Date()
+            lastLoudTime = DispatchTime.now().uptimeNanoseconds
         }
 
         try await stream.startCapture()
@@ -293,6 +293,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
             timer.schedule(deadline: .now() + 1, repeating: 1.0)
             timer.setEventHandler { [weak self] in
                 guard let self else { return }
+                let now = DispatchTime.now().uptimeNanoseconds
                 os_unfair_lock_lock(&self.lastLoudTimeLock)
                 var effectiveLastLoud = self.lastLoudTime
                 os_unfair_lock_unlock(&self.lastLoudTimeLock)
@@ -303,7 +304,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
                         effectiveLastLoud = micLastLoud
                     }
                 }
-                let elapsed = Date().timeIntervalSince(effectiveLastLoud)
+                let elapsed = Double(now - effectiveLastLoud) / 1_000_000_000.0
                 if elapsed > self.silenceTimeout {
                     fputs("[SILENCE_TIMEOUT]\n", stderr)
                     self.silenceTimer?.cancel()
@@ -387,7 +388,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         // Update last loud time for silence timeout
         if bufferPeak > 1e-4 {
             os_unfair_lock_lock(&lastLoudTimeLock)
-            lastLoudTime = Date()
+            lastLoudTime = DispatchTime.now().uptimeNanoseconds
             os_unfair_lock_unlock(&lastLoudTimeLock)
         }
 

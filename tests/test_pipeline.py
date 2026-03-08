@@ -66,7 +66,7 @@ class TestCreateRecorder:
         from ownscribe.pipeline import _create_recorder
 
         config = Config()
-        config.audio.backend = "coreaudio"
+        config.audio.backend = "sounddevice"
         config.audio.device = "USB Mic"
         config.audio.silence_timeout = 60
 

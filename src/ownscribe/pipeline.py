@@ -228,11 +228,11 @@ def run_pipeline(config: Config) -> None:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_termios)
         signal.signal(signal.SIGINT, original_handler)
 
+    recorder.stop()
     if getattr(recorder, "silence_timed_out", False):
         click.echo("\n\nRecording auto-stopped after silence timeout.")
     else:
         click.echo("\n\nStopping recording...")
-    recorder.stop()
 
     if not audio_path.exists() or audio_path.stat().st_size <= _WAV_HEADER_SIZE:
         click.echo(
