@@ -247,13 +247,8 @@ def run_pipeline(config: Config) -> None:
     click.echo(f"Audio saved to {audio_path}\n")
 
     # Check for silent audio before spending time on transcription
-    if getattr(recorder, "silence_warning", False):
-        click.echo(
-            "Warning: audio may be silent — check Screen Recording permissions "
-            "(System Settings > Privacy & Security > Screen Recording).",
-            err=True,
-        )
-    else:
+    # Skip if the recorder already reported a silence warning (CoreAudio helper)
+    if not getattr(recorder, "silence_warning", False):
         _check_audio_silence(audio_path)
 
     # 2. Transcribe

@@ -153,10 +153,7 @@ class CoreAudioRecorder(AudioRecorder):
                 if "[SILENCE_TIMEOUT]" in stderr_output:
                     self._silence_timed_out = True
                 # Filter out mute toggles and known informational lines
-                _NOISE_PREFIXES = (
-                    "Recording ", "Saved ", "Merged audio saved",
-                    "[SILENCE_WARNING]", "Check: ",
-                )
+                _NOISE_PREFIXES = ("Recording ", "Saved ", "Merged audio saved")
                 _NOISE_LINES = ("[MIC_MUTED]", "[MIC_UNMUTED]", "[SILENCE_TIMEOUT]")
                 lines = [
                     line for line in stderr_output.strip().splitlines()
