@@ -58,7 +58,11 @@ def ask(config: Config, question: str, since: str | None, limit: int | None) -> 
         click.echo("Summarization must be enabled to use ask. Check your configuration.")
         return
 
-    summarizer = create_summarizer(config)
+    try:
+        summarizer = create_summarizer(config)
+    except ImportError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        return
     if not summarizer.is_available():
         click.echo("Summarization backend is not reachable. Check your configuration.")
         return

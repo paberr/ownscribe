@@ -61,7 +61,7 @@ All audio, transcripts, and summaries remain local.
 - [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
 - Xcode Command Line Tools (`xcode-select --install`)
 
-Summarization works out of the box — a local model (Phi-4-mini, ~2.4 GB) downloads automatically on first run. Optionally, you can use [Ollama](https://ollama.ai), [LM Studio](https://lmstudio.ai), or any OpenAI-compatible server instead (see [Configuration](#configuration)).
+Summarization backends are installed separately. Use the built-in local model, [Ollama](https://ollama.ai), [LM Studio](https://lmstudio.ai), or any OpenAI-compatible server (see [Installation](#installation) and [Configuration](#configuration)).
 
 Works with any app that outputs audio through Core Audio (Zoom, Teams, Meet, etc.).
 
@@ -82,6 +82,17 @@ uvx ownscribe
 
 On macOS, the Swift audio capture helper is downloaded automatically on first run.
 
+### Summarization backends
+
+Install the backend you want to use for summarization:
+
+```bash
+pip install 'ownscribe[local]'    # built-in local model via llama-cpp-python
+pip install 'ownscribe[ollama]'   # use Ollama
+pip install 'ownscribe[openai]'   # use any OpenAI-compatible server (LM Studio, llama-server, etc.)
+pip install 'ownscribe[all]'      # install all optional backends
+```
+
 ### From source
 
 ```bash
@@ -89,11 +100,11 @@ On macOS, the Swift audio capture helper is downloaded automatically on first ru
 git clone https://github.com/paberr/ownscribe.git
 cd ownscribe
 
-# Build the Swift audio capture helper (optional — auto-downloads if skipped)
+# Build the Swift audio capture helper (optional - auto-downloads if skipped)
 bash swift/build.sh
 
-# Install with transcription support
-uv sync --extra transcription
+# Install with all backends
+uv sync --extra all
 ```
 
 ## Usage

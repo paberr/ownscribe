@@ -7,17 +7,32 @@ if TYPE_CHECKING:
     from ownscribe.summarization.base import Summarizer
 
 
+_INSTALL_HINTS = {
+    "local": "pip install 'ownscribe[local]'",
+    "openai": "pip install 'ownscribe[openai]'",
+    "ollama": "pip install 'ownscribe[ollama]'",
+}
+
+
 def create_summarizer(config: Config) -> Summarizer:
     """Create the appropriate summarizer based on config."""
-    if config.summarization.backend == "local":
-        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+    backend = config.summarization.backend
+    try:
+        if backend == "local":
+            from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
 
-        return LlamaCppSummarizer(config.summarization, config.templates)
-    elif config.summarization.backend == "openai":
-        from ownscribe.summarization.openai_summarizer import OpenAISummarizer
+            return LlamaCppSummarizer(config.summarization, config.templates)
+        elif backend == "openai":
+            from ownscribe.summarization.openai_summarizer import OpenAISummarizer
 
-        return OpenAISummarizer(config.summarization, config.templates)
-    else:
-        from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
+            return OpenAISummarizer(config.summarization, config.templates)
+        else:
+            from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
 
-        return OllamaSummarizer(config.summarization, config.templates)
+            return OllamaSummarizer(config.summarization, config.templates)
+    except ImportError:
+        hint = _INSTALL_HINTS.get(backend, f"pip install 'ownscribe[{backend}]'")
+        raise ImportError(
+            f"The '{backend}' summarization backend requires additional dependencies.\n"
+            f"Install with: {hint}"
+        ) from None

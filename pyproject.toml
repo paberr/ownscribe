@@ -23,12 +23,14 @@ dependencies = [
     "click>=8.1",
     "sounddevice>=0.5",
     "soundfile>=0.13",
-    "ollama>=0.4",
-    "openai>=1.0",
     "whisperx>=3.7",
-    "llama-cpp-python>=0.3",
-    "huggingface-hub>=0.20",
 ]
+
+[project.optional-dependencies]
+ollama = ["ollama>=0.4"]
+openai = ["openai>=1.0"]
+local = ["llama-cpp-python>=0.3", "huggingface-hub>=0.20"]
+all = ["ownscribe[ollama,openai,local]"]
 
 [project.urls]
 Homepage = "https://github.com/paberr/ownscribe"
@@ -40,6 +42,7 @@ ownscribe = "ownscribe.cli:cli"
 
 [dependency-groups]
 dev = [
+    "ownscribe[all]",
     "pytest>=8.0",
     "pytest-httpserver>=1.1",
     "ruff>=0.9",

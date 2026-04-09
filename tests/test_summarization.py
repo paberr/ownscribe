@@ -6,11 +6,31 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ownscribe.config import SummarizationConfig, TemplateConfig
+from ownscribe.config import Config, SummarizationConfig, TemplateConfig
+from ownscribe.summarization import create_summarizer
 from ownscribe.summarization.prompts import (
     LECTURE_SUMMARY_SYSTEM,
     clean_response,
 )
+
+
+class TestCreateSummarizerMissingDeps:
+    """Test that create_summarizer raises helpful errors when optional deps are missing."""
+
+    @pytest.mark.parametrize(
+        "backend,module,extra",
+        [
+            ("ollama", "ownscribe.summarization.ollama_summarizer", "ollama"),
+            ("openai", "ownscribe.summarization.openai_summarizer", "openai"),
+            ("local", "ownscribe.summarization.llama_cpp_summarizer", "local"),
+        ],
+    )
+    def test_missing_backend_dep(self, backend, module, extra):
+        config = Config()
+        config.summarization.backend = backend
+
+        with patch.dict("sys.modules", {module: None}), pytest.raises(ImportError, match=f"ownscribe\\[{extra}\\]"):
+            create_summarizer(config)
 
 
 class TestCleanResponse:

@@ -321,7 +321,11 @@ def run_summarize(config: Config, transcript_file: str) -> None:
     transcript_path = Path(transcript_file).resolve()
     transcript_text = transcript_path.read_text()
 
-    summarizer = create_summarizer(config)
+    try:
+        summarizer = create_summarizer(config)
+    except ImportError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from None
     if not summarizer.is_available():
         if config.summarization.backend == "local":
             click.echo(
@@ -428,7 +432,11 @@ def _do_transcribe_and_summarize(
         transcript_path.write_text(transcript_str)
 
         if sum_enabled:
-            summarizer = create_summarizer(config)
+            try:
+                summarizer = create_summarizer(config)
+            except ImportError as exc:
+                click.echo(f"Error: {exc}", err=True)
+                raise SystemExit(1) from None
             if not summarizer.is_available():
                 sum_unavailable = True
             else:
