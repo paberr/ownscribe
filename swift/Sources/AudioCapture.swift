@@ -271,15 +271,15 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
-        config.sampleRate = 48000
-        config.channelCount = 2
+        config.sampleRate = 24000
+        config.channelCount = 1
         config.width = 2
         config.height = 2
         config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
         config.showsCursor = false
 
         // Create AVAudioFile for WAV output (interleaved to avoid CoreAudio warning)
-        let fileFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 2, interleaved: true)!
+        let fileFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: true)!
         let audioFile = try AVAudioFile(forWriting: URL(fileURLWithPath: outputPath),
                                          settings: fileFormat.settings,
                                          commonFormat: .pcmFormatFloat32,
@@ -401,7 +401,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         }
 
         // Check for silence after ~3 seconds of data
-        if !silenceChecked && totalFrames > 48000 * 3 {
+        if !silenceChecked && totalFrames > 24000 * 3 {
             silenceChecked = true
             if peakLevel < 1e-6 {
                 silenceWarned = true
@@ -433,7 +433,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         // AVAudioFile finalizes on close
         audioFile = nil
 
-        let seconds = Double(totalFrames) / 48000.0
+        let seconds = Double(totalFrames) / 24000.0
         fputs("Saved \(outputPath) (\(String(format: "%.1f", seconds)) seconds, peak=\(String(format: "%.6f", peakLevel)))\n", stderr)
         if totalFrames > 0 && peakLevel < 1e-6 {
             fputs("[SILENCE_WARNING] Recording appears silent. Check Screen Recording permission.\n", stderr)
@@ -557,8 +557,8 @@ func mergeAudioFiles(systemPath: String, micPath: String,
         ? try AVAudioFile(forReading: URL(fileURLWithPath: systemPath)) : nil
     let micFile = try AVAudioFile(forReading: URL(fileURLWithPath: micPath))
 
-    let outputSampleRate: Double = 48000
-    let outputChannels: AVAudioChannelCount = 2
+    let outputSampleRate: Double = 24000
+    let outputChannels: AVAudioChannelCount = 1
 
     // Compute offset in seconds between the two start times using mach_timebase_info
     let offsetFrames: Int64
@@ -625,9 +625,16 @@ func mergeAudioFiles(systemPath: String, micPath: String,
                     if let sysBuf = AVAudioPCMBuffer(pcmFormat: systemFile.processingFormat, frameCapacity: sysReadCount) {
                         try systemFile.read(into: sysBuf, frameCount: sysReadCount)
                         let sysData = sysBuf.floatChannelData!
+                        let sysCh = Int(sysBuf.format.channelCount)
                         for i in 0..<Int(sysBuf.frameLength) {
-                            outPtr[i * 2] += sysData[0][i]
-                            outPtr[i * 2 + 1] += sysData[1][i]
+                            if outputChannels == 1 {
+                                var mix: Float = 0
+                                for ch in 0..<sysCh { mix += sysData[ch][i] }
+                                outPtr[i] += mix / Float(sysCh)
+                            } else {
+                                outPtr[i * 2] += sysData[0][i]
+                                outPtr[i * 2 + 1] += sysCh > 1 ? sysData[1][i] : sysData[0][i]
+                            }
                         }
                     }
                 }
