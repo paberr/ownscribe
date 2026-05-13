@@ -21,6 +21,8 @@ silence_timeout = 300     # seconds of silence before auto-stop; 0 = disabled
 [transcription]
 model = "base"            # whisper model: tiny, base, small, medium, large-v3
 language = ""             # empty = auto-detect
+# initial_prompt = ""     # prime Whisper with context: domain vocab, speaker names, expected phrases
+# hotwords = ""           # comma-separated words to boost recognition (softer hint than initial_prompt)
 
 [diarization]
 enabled = false           # set to true + provide hf_token to enable
@@ -63,6 +65,8 @@ class AudioConfig:
 class TranscriptionConfig:
     model: str = "base"
     language: str = ""
+    initial_prompt: str = ""
+    hotwords: str = ""
 
 
 @dataclass

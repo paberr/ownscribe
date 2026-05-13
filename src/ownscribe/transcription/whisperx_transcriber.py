@@ -46,11 +46,17 @@ class WhisperXTranscriber(Transcriber):
 
         device = "cpu"
         compute_type = "int8"
+        asr_options = {}
+        if self._tx_config.initial_prompt:
+            asr_options["initial_prompt"] = self._tx_config.initial_prompt
+        if self._tx_config.hotwords:
+            asr_options["hotwords"] = self._tx_config.hotwords
         self._model = whisperx.load_model(
             self._tx_config.model,
             device,
             compute_type=compute_type,
             language=self._tx_config.language or None,
+            asr_options=asr_options or None,
         )
 
     def _configure_runtime_env(self) -> None:

@@ -37,6 +37,8 @@ def _dir_size(path: str) -> str:
 @click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default=None, help="Output format.")
 @click.option("--model", default=None, help="Whisper model size (tiny, base, small, medium, large-v3).")
 @click.option("--language", default=None, help="Language code for transcription (e.g. en, de, fr).")
+@click.option("--initial-prompt", default=None, help="Context text to prime Whisper (domain vocab, speaker names, etc.).")
+@click.option("--hotwords", default=None, help="Comma-separated words to boost Whisper recognition.")
 @click.option("--mic", is_flag=True, help="Also capture microphone input (mixed with system audio).")
 @click.option("--mic-device", default=None, help="Specific mic device name (implies --mic).")
 @click.option(
@@ -58,6 +60,8 @@ def cli(
     output_format: str | None,
     model: str | None,
     language: str | None,
+    initial_prompt: str | None,
+    hotwords: str | None,
     mic: bool,
     mic_device: str | None,
     keep_recording: bool | None,
@@ -86,6 +90,10 @@ def cli(
         config.transcription.model = model
     if language:
         config.transcription.language = language
+    if initial_prompt:
+        config.transcription.initial_prompt = initial_prompt
+    if hotwords:
+        config.transcription.hotwords = hotwords
     if mic or mic_device:
         config.audio.mic = True
     if mic_device:
