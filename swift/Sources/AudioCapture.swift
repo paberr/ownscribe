@@ -618,22 +618,26 @@ func mergeAudioFiles(systemPath: String, micPath: String,
         // Read and mix system audio (manual interleave from non-interleaved processingFormat)
         if let systemFile = systemFile {
             let sysFrameInFile = (offsetFrames >= 0) ? outputFrame : outputFrame + offsetFrames
-            if sysFrameInFile >= 0 && sysFrameInFile < systemLength {
-                let sysReadCount = AVAudioFrameCount(min(Int64(framesToProcess), systemLength - sysFrameInFile))
+            let writeOffset = max(0, -sysFrameInFile)
+            let readStart = max(0, sysFrameInFile)
+            if readStart < systemLength && writeOffset < Int64(framesToProcess) {
+                let maxRead = Int64(framesToProcess) - writeOffset
+                let sysReadCount = AVAudioFrameCount(min(maxRead, systemLength - readStart))
                 if sysReadCount > 0 {
-                    systemFile.framePosition = AVAudioFramePosition(sysFrameInFile)
+                    systemFile.framePosition = AVAudioFramePosition(readStart)
                     if let sysBuf = AVAudioPCMBuffer(pcmFormat: systemFile.processingFormat, frameCapacity: sysReadCount) {
                         try systemFile.read(into: sysBuf, frameCount: sysReadCount)
                         let sysData = sysBuf.floatChannelData!
                         let sysCh = Int(sysBuf.format.channelCount)
+                        let wo = Int(writeOffset)
                         for i in 0..<Int(sysBuf.frameLength) {
                             if outputChannels == 1 {
                                 var mix: Float = 0
                                 for ch in 0..<sysCh { mix += sysData[ch][i] }
-                                outPtr[i] += mix / Float(sysCh)
+                                outPtr[wo + i] += mix / Float(sysCh)
                             } else {
-                                outPtr[i * 2] += sysData[0][i]
-                                outPtr[i * 2 + 1] += sysCh > 1 ? sysData[1][i] : sysData[0][i]
+                                outPtr[(wo + i) * 2] += sysData[0][i]
+                                outPtr[(wo + i) * 2 + 1] += sysCh > 1 ? sysData[1][i] : sysData[0][i]
                             }
                         }
                     }
