@@ -244,11 +244,9 @@ Then use with `--template my-standup` or `template = "my-standup"` in config.
 
 ## Speaker Diarization
 
-Speaker identification requires a HuggingFace token with access to the pyannote models:
+Speaker identification requires a HuggingFace token with access to the pyannote diarization model:
 
-1. Accept the terms for both models on HuggingFace:
-   - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
-   - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
+1. Accept the terms for [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) on HuggingFace
 2. Create a token at https://huggingface.co/settings/tokens
 3. Set `HF_TOKEN` env var or add `hf_token` to config
 4. Run with `--diarize`
