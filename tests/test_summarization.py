@@ -22,7 +22,6 @@ class TestCreateSummarizerMissingDeps:
         [
             ("ollama", "ownscribe.summarization.ollama_summarizer", "ollama"),
             ("openai", "ownscribe.summarization.openai_summarizer", "openai"),
-            ("local", "ownscribe.summarization.llama_cpp_summarizer", "local"),
         ],
     )
     def test_missing_backend_dep(self, backend, module, extra):

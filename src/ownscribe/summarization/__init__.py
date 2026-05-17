@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 
 _INSTALL_HINTS = {
-    "local": "pip install 'ownscribe[local]'",
     "openai": "pip install 'ownscribe[openai]'",
     "ollama": "pip install 'ownscribe[ollama]'",
 }
@@ -17,12 +16,12 @@ _INSTALL_HINTS = {
 def create_summarizer(config: Config) -> Summarizer:
     """Create the appropriate summarizer based on config."""
     backend = config.summarization.backend
-    try:
-        if backend == "local":
-            from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
+    if backend == "local":
+        from ownscribe.summarization.llama_cpp_summarizer import LlamaCppSummarizer
 
-            return LlamaCppSummarizer(config.summarization, config.templates)
-        elif backend == "openai":
+        return LlamaCppSummarizer(config.summarization, config.templates)
+    try:
+        if backend == "openai":
             from ownscribe.summarization.openai_summarizer import OpenAISummarizer
 
             return OpenAISummarizer(config.summarization, config.templates)
