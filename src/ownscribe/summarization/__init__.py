@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
 
 _INSTALL_HINTS = {
-    "openai": "pip install 'ownscribe[openai]'",
-    "ollama": "pip install 'ownscribe[ollama]'",
+    "openai": "uv add 'ownscribe[openai]'",
+    "ollama": "uv add 'ownscribe[ollama]'",
 }
 
 
@@ -29,9 +29,9 @@ def create_summarizer(config: Config) -> Summarizer:
             from ownscribe.summarization.ollama_summarizer import OllamaSummarizer
 
             return OllamaSummarizer(config.summarization, config.templates)
-    except ImportError:
-        hint = _INSTALL_HINTS.get(backend, f"pip install 'ownscribe[{backend}]'")
+    except ImportError as exc:
+        hint = _INSTALL_HINTS.get(backend, f"uv add 'ownscribe[{backend}]'")
         raise ImportError(
             f"The '{backend}' summarization backend requires additional dependencies.\n"
             f"Install with: {hint}"
-        ) from None
+        ) from exc

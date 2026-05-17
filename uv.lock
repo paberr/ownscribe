@@ -1679,7 +1679,8 @@ openai = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "ownscribe", extra = ["all"] },
+    { name = "ollama" },
+    { name = "openai" },
     { name = "pytest" },
     { name = "pytest-httpserver" },
     { name = "ruff" },
@@ -1690,9 +1691,10 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "huggingface-hub", specifier = ">=0.20" },
     { name = "llama-cpp-python", specifier = ">=0.3" },
+    { name = "ollama", marker = "extra == 'all'", specifier = ">=0.4" },
     { name = "ollama", marker = "extra == 'ollama'", specifier = ">=0.4" },
+    { name = "openai", marker = "extra == 'all'", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0" },
-    { name = "ownscribe", extras = ["ollama", "openai"], marker = "extra == 'all'" },
     { name = "sounddevice", specifier = ">=0.5" },
     { name = "soundfile", specifier = ">=0.13" },
     { name = "whisperx", specifier = ">=3.7" },
@@ -1701,7 +1703,8 @@ provides-extras = ["ollama", "openai", "all"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "ownscribe", extras = ["all"] },
+    { name = "ollama", specifier = ">=0.4" },
+    { name = "openai", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-httpserver", specifier = ">=1.1" },
     { name = "ruff", specifier = ">=0.9" },

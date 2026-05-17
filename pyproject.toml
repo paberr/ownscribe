@@ -31,7 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 ollama = ["ollama>=0.4"]
 openai = ["openai>=1.0"]
-all = ["ownscribe[ollama,openai]"]
+all = ["ollama>=0.4", "openai>=1.0"]
 
 [project.urls]
 Homepage = "https://github.com/paberr/ownscribe"
@@ -43,7 +43,8 @@ ownscribe = "ownscribe.cli:cli"
 
 [dependency-groups]
 dev = [
-    "ownscribe[all]",
+    "ollama>=0.4",
+    "openai>=1.0",
     "pytest>=8.0",
     "pytest-httpserver>=1.1",
     "ruff>=0.9",

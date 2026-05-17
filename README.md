@@ -87,9 +87,9 @@ On macOS, the Swift audio capture helper is downloaded automatically on first ru
 The built-in local model works out of the box. If you'd rather call a hosted backend, install the matching extra:
 
 ```bash
-pip install 'ownscribe[ollama]'   # use Ollama
-pip install 'ownscribe[openai]'   # use any OpenAI-compatible server (LM Studio, llama-server, etc.)
-pip install 'ownscribe[all]'      # install both
+uv add 'ownscribe[ollama]'   # use Ollama
+uv add 'ownscribe[openai]'   # use any OpenAI-compatible server (LM Studio, llama-server, etc.)
+uv add 'ownscribe[all]'      # install both
 ```
 
 ### From source
