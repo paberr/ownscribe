@@ -24,6 +24,7 @@ dependencies = [
     "sounddevice>=0.5",
     "soundfile>=0.13",
     "whisperx>=3.8",
+    "pyannote-audio>=4.0",
     "llama-cpp-python>=0.3",
     "huggingface-hub>=0.20",
 ]

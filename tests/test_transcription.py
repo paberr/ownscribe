@@ -216,3 +216,36 @@ class TestDiarizationApiCompat:
         kwargs = fake_pipeline.call_args.kwargs
         assert kwargs.get("token") == "hf_test_token"
         assert "use_auth_token" not in kwargs
+
+    def test_diarize_unwraps_speaker_diarization_from_diarize_output(self):
+        # pyannote.audio 4.0 wraps the annotation in a DiarizeOutput container;
+        # _diarize must read it as `.speaker_diarization.itertracks()`.
+        import numpy as np
+
+        from ownscribe.config import DiarizationConfig, TranscriptionConfig
+        from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
+
+        diar = DiarizationConfig(enabled=True, hf_token="hf_test_token", device="cpu")
+        transcriber = WhisperXTranscriber(TranscriptionConfig(), diar, progress=_FakeProgress())
+
+        fake_segment = types.SimpleNamespace(start=0.5, end=1.5)
+        fake_annotation = mock.MagicMock()
+        fake_annotation.itertracks.return_value = [(fake_segment, "track_0", "SPEAKER_00")]
+        # DiarizeOutput stand-in: deliberately no top-level `itertracks` attribute.
+        fake_diarize_output = types.SimpleNamespace(speaker_diarization=fake_annotation)
+
+        fake_diarize_model = mock.MagicMock()
+        fake_diarize_model.model.return_value = fake_diarize_output
+
+        fake_whisperx = types.SimpleNamespace(assign_word_speakers=lambda df, res: ("assigned", df, res))
+
+        audio = np.zeros(16000, dtype=np.float32)
+
+        with (
+            mock.patch.object(transcriber, "_load_diarization_pipeline", return_value=fake_diarize_model),
+            mock.patch.dict("sys.modules", {"whisperx": fake_whisperx}),
+        ):
+            out = transcriber._diarize(audio, {"segments": []})
+
+        fake_annotation.itertracks.assert_called_once_with(yield_label=True)
+        assert out[0] == "assigned"
