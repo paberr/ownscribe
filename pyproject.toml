@@ -23,7 +23,7 @@ dependencies = [
     "click>=8.1",
     "sounddevice>=0.5",
     "soundfile>=0.13",
-    "whisperx>=3.7",
+    "whisperx>=3.8",
     "llama-cpp-python>=0.3",
     "huggingface-hub>=0.20",
 ]

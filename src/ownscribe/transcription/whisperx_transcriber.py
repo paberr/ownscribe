@@ -141,7 +141,7 @@ class WhisperXTranscriber(Transcriber):
             step_key,
             "Loading diarization pipeline",
             DiarizationPipeline,
-            use_auth_token=self._diar_config.hf_token,
+            token=self._diar_config.hf_token,
             device=device,
         )
         return self._diarize_model
@@ -338,7 +338,7 @@ class WhisperXTranscriber(Transcriber):
 
         # Convert to DataFrame (replicating whisperx/diarize.py logic)
         diarize_df = pd.DataFrame(
-            diarization.itertracks(yield_label=True),
+            diarization.speaker_diarization.itertracks(yield_label=True),
             columns=["segment", "label", "speaker"],
         )
         diarize_df["start"] = diarize_df["segment"].apply(lambda x: x.start)

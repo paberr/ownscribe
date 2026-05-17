@@ -188,3 +188,31 @@ class TestDownloadProgressHooks:
         assert ("begin", "transcribing") in progress.calls
         assert ("begin", "preparing_models") not in progress.calls
         assert result.language == "en"
+
+
+class TestDiarizationApiCompat:
+    def test_load_diarization_pipeline_passes_token_kwarg(self):
+        # pyannote.audio 4.0 renamed `use_auth_token` -> `token`.
+        from ownscribe.config import DiarizationConfig, TranscriptionConfig
+        from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
+
+        diar = DiarizationConfig(enabled=True, hf_token="hf_test_token", device="cpu")
+        transcriber = WhisperXTranscriber(TranscriptionConfig(), diar, progress=_FakeProgress())
+
+        fake_pipeline = mock.MagicMock(return_value=mock.sentinel.diarize_model)
+        fake_diarize_module = types.SimpleNamespace(DiarizationPipeline=fake_pipeline)
+
+        def passthrough(_step_key, _label, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        with (
+            mock.patch.dict("sys.modules", {"whisperx.diarize": fake_diarize_module}),
+            mock.patch.object(transcriber, "_capture_download_output", side_effect=passthrough),
+        ):
+            result = transcriber._load_diarization_pipeline()
+
+        assert result is mock.sentinel.diarize_model
+        fake_pipeline.assert_called_once()
+        kwargs = fake_pipeline.call_args.kwargs
+        assert kwargs.get("token") == "hf_test_token"
+        assert "use_auth_token" not in kwargs
