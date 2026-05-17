@@ -13,6 +13,8 @@ import AudioToolbox
 private let kMicLoudThreshold: Float = 1e-2
 /// Minimum peak amplitude to consider system audio "loud" (silence timeout).
 private let kSystemLoudThreshold: Float = 1e-4
+/// System audio capture and merge output sample rate (mono float32).
+private let kSystemAudioSampleRate: Double = 24000
 
 /// Compute peak amplitude across all channels of float audio data.
 func computePeakLevel(in channelData: UnsafePointer<UnsafeMutablePointer<Float>>,
@@ -271,7 +273,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
-        config.sampleRate = 24000
+        config.sampleRate = Int(kSystemAudioSampleRate)
         config.channelCount = 1
         config.width = 2
         config.height = 2
@@ -279,7 +281,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         config.showsCursor = false
 
         // Create AVAudioFile for WAV output (interleaved to avoid CoreAudio warning)
-        let fileFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: true)!
+        let fileFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: kSystemAudioSampleRate, channels: 1, interleaved: true)!
         let audioFile = try AVAudioFile(forWriting: URL(fileURLWithPath: outputPath),
                                          settings: fileFormat.settings,
                                          commonFormat: .pcmFormatFloat32,
@@ -401,7 +403,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         }
 
         // Check for silence after ~3 seconds of data
-        if !silenceChecked && totalFrames > 24000 * 3 {
+        if !silenceChecked && Double(totalFrames) > kSystemAudioSampleRate * 3 {
             silenceChecked = true
             if peakLevel < 1e-6 {
                 silenceWarned = true
@@ -433,7 +435,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         // AVAudioFile finalizes on close
         audioFile = nil
 
-        let seconds = Double(totalFrames) / 24000.0
+        let seconds = Double(totalFrames) / kSystemAudioSampleRate
         fputs("Saved \(outputPath) (\(String(format: "%.1f", seconds)) seconds, peak=\(String(format: "%.6f", peakLevel)))\n", stderr)
         if totalFrames > 0 && peakLevel < 1e-6 {
             fputs("[SILENCE_WARNING] Recording appears silent. Check Screen Recording permission.\n", stderr)
@@ -557,7 +559,7 @@ func mergeAudioFiles(systemPath: String, micPath: String,
         ? try AVAudioFile(forReading: URL(fileURLWithPath: systemPath)) : nil
     let micFile = try AVAudioFile(forReading: URL(fileURLWithPath: micPath))
 
-    let outputSampleRate: Double = 24000
+    let outputSampleRate: Double = kSystemAudioSampleRate
     let outputChannels: AVAudioChannelCount = 1
 
     // Compute offset in seconds between the two start times using mach_timebase_info
