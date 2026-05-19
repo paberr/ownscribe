@@ -369,12 +369,10 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         guard status == noErr else { return }
 
         // Convert non-interleaved → interleaved if needed, then write
-        var peakBuffer: AVAudioPCMBuffer = pcmBuffer
         do {
             if sampleFormat.isInterleaved {
                 try audioFile.write(from: pcmBuffer)
             } else {
-                // Lazily create converter matching this source format
                 if audioConverter?.inputFormat != sampleFormat {
                     let interleavedFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                                        sampleRate: sampleFormat.sampleRate,
@@ -387,7 +385,6 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
                     guard let outBuffer = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: frameCount) else { return }
                     try converter.convert(to: outBuffer, from: pcmBuffer)
                     try audioFile.write(from: outBuffer)
-                    peakBuffer = outBuffer
                 }
             }
         } catch {
@@ -396,10 +393,10 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
 
         totalFrames += Int64(frameCount)
 
-        // Peak detection on the converted (interleaved) buffer — the raw capture
-        // buffer may be non-interleaved, where floatChannelData returns nil
-        let bufferPeak: Float = peakBuffer.floatChannelData.map {
-            computePeakLevel(in: $0, channels: Int(peakBuffer.format.channelCount), frames: Int(peakBuffer.frameLength))
+        // Peak detection on the pre-conversion buffer — floatChannelData returns nil
+        // for interleaved buffers, so we must use the original SCK buffer
+        let bufferPeak: Float = pcmBuffer.floatChannelData.map {
+            computePeakLevel(in: $0, channels: Int(pcmBuffer.format.channelCount), frames: Int(pcmBuffer.frameLength))
         } ?? 0.0
         if bufferPeak > self.peakLevel { self.peakLevel = bufferPeak }
 
@@ -415,8 +412,12 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
             silenceChecked = true
             if peakLevel < 1e-6 {
                 silenceWarned = true
-                fputs("[SILENCE_WARNING] Audio data received but peak level is near zero (\(peakLevel)). Audio may be silent.\n", stderr)
-                fputs("Check: System Settings > Privacy & Security > Screen Recording — enable your terminal app.\n", stderr)
+                if micCapture != nil {
+                    fputs("[SILENCE_WARNING] System audio is silent (mic is still recording). No system audio sources detected.\n", stderr)
+                } else {
+                    fputs("[SILENCE_WARNING] Audio data received but peak level is near zero (\(peakLevel)). Audio may be silent.\n", stderr)
+                    fputs("Check: System Settings > Privacy & Security > Screen Recording — enable your terminal app.\n", stderr)
+                }
             }
         }
     }
