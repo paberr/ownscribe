@@ -116,7 +116,11 @@ class MicCapture {
                     os_unfair_lock_unlock(&self._lastLoudTimeLock)
                 }
             }
-            try? self.audioFile?.write(from: buffer)
+            do {
+                try self.audioFile?.write(from: buffer)
+            } catch {
+                fputs("Mic write error: \(error)\n", stderr)
+            }
         }
         try engine.start()
         fputs("Recording microphone audio to \(outputPath)...\n", stderr)
@@ -322,6 +326,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
                         effectiveLastLoud = micLastLoud
                     }
                 }
+                guard now >= effectiveLastLoud else { return }
                 let elapsed = Double(now - effectiveLastLoud) / 1_000_000_000.0
                 if elapsed > self.silenceTimeout {
                     fputs("[SILENCE_TIMEOUT]\n", stderr)
@@ -370,7 +375,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
                 try audioFile.write(from: pcmBuffer)
             } else {
                 // Lazily create converter matching this source format
-                if audioConverter == nil || audioConverter!.inputFormat != sampleFormat {
+                if audioConverter?.inputFormat != sampleFormat {
                     let interleavedFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                                        sampleRate: sampleFormat.sampleRate,
                                                        channels: sampleFormat.channelCount,
