@@ -217,6 +217,12 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
     private var lastLoudTimeLock = os_unfair_lock_s()
     private var silenceTimer: DispatchSourceTimer?
 
+    // Watchdog: detect if SCStream stops delivering callbacks silently
+    private var lastCallbackTime: UInt64 = 0
+    private var lastCallbackTimeLock = os_unfair_lock_s()
+    private var watchdogTimer: DispatchSourceTimer?
+    private let watchdogDeadline: TimeInterval = 10
+
     // Picker continuation
     private var startContinuation: CheckedContinuation<Void, Error>?
 
@@ -297,10 +303,32 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
             lastLoudTime = DispatchTime.now().uptimeNanoseconds
         }
 
+        lastCallbackTime = DispatchTime.now().uptimeNanoseconds
+
         try await stream.startCapture()
         self.stream = stream
 
         fputs("Recording system audio to \(outputPath)... Press Ctrl+C to stop.\n", stderr)
+
+        // Watchdog: detect if SCStream silently stops delivering audio callbacks
+        let wd = DispatchSource.makeTimerSource(queue: .main)
+        wd.schedule(deadline: .now() + 5, repeating: 5.0)
+        wd.setEventHandler { [weak self] in
+            guard let self else { return }
+            let now = DispatchTime.now().uptimeNanoseconds
+            os_unfair_lock_lock(&self.lastCallbackTimeLock)
+            let lastCb = self.lastCallbackTime
+            os_unfair_lock_unlock(&self.lastCallbackTimeLock)
+            guard now >= lastCb else { return }
+            let gap = Double(now - lastCb) / 1_000_000_000.0
+            if gap > self.watchdogDeadline {
+                self.watchdogTimer?.cancel()
+                self.watchdogTimer = nil
+                self.onStreamError?(CaptureError.streamStalled(seconds: gap))
+            }
+        }
+        wd.resume()
+        watchdogTimer = wd
 
         // Start silence timeout timer if configured.
         // Checks every 1s whether both system audio and mic (if active) have been
@@ -342,7 +370,10 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
         guard let audioFile else { return }
         guard CMSampleBufferGetNumSamples(sampleBuffer) > 0 else { return }
 
-        // Capture start host time from first audio buffer
+        os_unfair_lock_lock(&lastCallbackTimeLock)
+        lastCallbackTime = DispatchTime.now().uptimeNanoseconds
+        os_unfair_lock_unlock(&lastCallbackTimeLock)
+
         if startHostTime == 0 {
             startHostTime = mach_absolute_time()
         }
@@ -418,8 +449,11 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
 
     // MARK: - SCStreamDelegate
 
+    var onStreamError: ((Error) -> Void)?
+
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        fputs("Stream error: \(error)\n", stderr)
+        fputs("[STREAM_ERROR] \(error)\n", stderr)
+        onStreamError?(error)
     }
 
     // MARK: - Stop
@@ -427,6 +461,8 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
     func stop() {
         silenceTimer?.cancel()
         silenceTimer = nil
+        watchdogTimer?.cancel()
+        watchdogTimer = nil
 
         let sem = DispatchSemaphore(value: 0)
         Task.detached { [stream] in
@@ -448,11 +484,13 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate, SCContentS
     enum CaptureError: Error, CustomStringConvertible {
         case cannotOpenFile(String)
         case noDisplay
+        case streamStalled(seconds: Double)
 
         var description: String {
             switch self {
             case .cannotOpenFile(let p): return "Cannot open file: \(p)"
             case .noDisplay: return "No display found"
+            case .streamStalled(let s): return "No audio callbacks for \(String(format: "%.0f", s))s"
             }
         }
     }
@@ -828,8 +866,7 @@ func main() {
             capture.micCapture = mic
         }
 
-        // Shared shutdown logic for SIGINT, SIGTERM, and silence timeout
-        let shutdown: () -> Void = {
+        let shutdown: (Int32) -> Void = { exitCode in
             capture.stop()
             if let mic = micCapture {
                 mic.stop()
@@ -844,10 +881,14 @@ func main() {
                     fputs("Error merging audio: \(error)\n", stderr)
                 }
             }
-            exit(0)
+            exit(exitCode)
         }
 
-        capture.onSilenceTimeout = shutdown
+        capture.onSilenceTimeout = { shutdown(0) }
+        capture.onStreamError = { error in
+            fputs("[STREAM_DIED] \(error)\n", stderr)
+            shutdown(2)
+        }
 
         // Toggle mic mute on SIGUSR1 (sent by Python wrapper)
         var _sigusr1Source: DispatchSourceSignal?  // retained to keep source alive
@@ -863,12 +904,12 @@ func main() {
         // Handle Ctrl+C gracefully
         let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         signal(SIGINT, SIG_IGN)
-        sigintSource.setEventHandler { shutdown() }
+        sigintSource.setEventHandler { shutdown(0) }
         sigintSource.resume()
 
         let sigtermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         signal(SIGTERM, SIG_IGN)
-        sigtermSource.setEventHandler { shutdown() }
+        sigtermSource.setEventHandler { shutdown(0) }
         sigtermSource.resume()
 
         Task {

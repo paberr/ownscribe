@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import platform
 import shutil
 import signal
@@ -13,6 +14,16 @@ from pathlib import Path
 import click
 
 from ownscribe.audio.base import AudioRecorder
+
+logger = logging.getLogger(__name__)
+
+_WAV_HEADER_SIZE = 44
+
+# Stderr markers emitted by the Swift helper (keep in sync with AudioCapture.swift)
+_MARKER_SILENCE_WARNING = "[SILENCE_WARNING]"
+_MARKER_SILENCE_TIMEOUT = "[SILENCE_TIMEOUT]"
+_MARKER_STREAM_ERROR = "[STREAM_ERROR]"
+_MARKER_STREAM_DIED = "[STREAM_DIED]"
 
 # Timeouts for graceful shutdown of the Swift helper.
 # SIGINT triggers track merging (system + mic) which can take a while for long recordings.
@@ -87,6 +98,10 @@ class CoreAudioRecorder(AudioRecorder):
         self._silence_warning: bool = False
         self._silence_timed_out: bool = False
         self._muted: bool = False
+        self._output_path: Path | None = None
+        self._crashed: bool = False
+        self._exit_code: int | None = None
+        self._stderr_output: str = ""
 
     def is_available(self) -> bool:
         return self._binary is not None
@@ -95,6 +110,7 @@ class CoreAudioRecorder(AudioRecorder):
         if not self._binary:
             raise RuntimeError("ownscribe-audio binary not found. Run: bash swift/build.sh")
 
+        self._output_path = output_path
         cmd = [str(self._binary), "capture", "--output", str(output_path)]
         if self._mic or self._mic_device:
             cmd.append("--mic")
@@ -133,8 +149,22 @@ class CoreAudioRecorder(AudioRecorder):
     def silence_timed_out(self) -> bool:
         return self._silence_timed_out
 
+    @property
+    def crashed(self) -> bool:
+        return self._crashed
+
+    @property
+    def exit_code(self) -> int | None:
+        return self._exit_code
+
+    @property
+    def stderr_output(self) -> str:
+        return self._stderr_output
+
     def stop(self) -> None:
-        if self._process and self._process.poll() is None:
+        rc = self._process.poll() if self._process else None
+
+        if rc is None and self._process:
             self._process.send_signal(signal.SIGINT)
             try:
                 self._process.wait(timeout=_STOP_TIMEOUT)
@@ -145,23 +175,95 @@ class CoreAudioRecorder(AudioRecorder):
                 except subprocess.TimeoutExpired:
                     self._process.kill()
                     self._process.wait()
-        if self._process and self._process.stderr:
-            stderr_output = self._process.stderr.read().decode(errors="replace")
-            if stderr_output:
-                if "[SILENCE_WARNING]" in stderr_output:
-                    self._silence_warning = True
-                if "[SILENCE_TIMEOUT]" in stderr_output:
-                    self._silence_timed_out = True
-                # Filter out mute toggles and known informational lines
-                _NOISE_PREFIXES = ("Recording ", "Saved ", "Merged audio saved")
-                _NOISE_LINES = ("[MIC_MUTED]", "[MIC_UNMUTED]", "[SILENCE_TIMEOUT]")
-                lines = [
-                    line for line in stderr_output.strip().splitlines()
-                    if line not in _NOISE_LINES
-                    and not line.startswith(_NOISE_PREFIXES)
-                ]
-                if lines:
-                    click.echo("\n".join(lines), err=True)
+
+        if self._process:
+            self._exit_code = self._process.returncode
+            self._finalize_stderr()
+
+        if self._crashed:
+            self._attempt_recovery()
+
+    def _finalize_stderr(self) -> None:
+        if not self._process or not self._process.stderr:
+            return
+        self._stderr_output = self._process.stderr.read().decode(errors="replace")
+        if not self._stderr_output:
+            return
+
+        if _MARKER_SILENCE_WARNING in self._stderr_output:
+            self._silence_warning = True
+        if _MARKER_SILENCE_TIMEOUT in self._stderr_output:
+            self._silence_timed_out = True
+        if _MARKER_STREAM_ERROR in self._stderr_output or _MARKER_STREAM_DIED in self._stderr_output:
+            self._crashed = True
+        if self._exit_code is not None and self._exit_code != 0:
+            self._crashed = True
+
+        _NOISE_PREFIXES = ("Recording ", "Saved ", "Merged audio saved")
+        _NOISE_LINES = (_MARKER_SILENCE_TIMEOUT, "[MIC_MUTED]", "[MIC_UNMUTED]")
+        lines = [
+            line for line in self._stderr_output.strip().splitlines()
+            if line not in _NOISE_LINES
+            and not line.startswith(_NOISE_PREFIXES)
+        ]
+        if lines:
+            click.echo("\n".join(lines), err=True)
+
+    def _attempt_recovery(self) -> None:
+        if not self._output_path:
+            return
+        output = self._output_path
+
+        if output.exists() and output.stat().st_size > _WAV_HEADER_SIZE:
+            return
+
+        sys_tmp = Path(str(output) + ".sys.tmp.wav")
+        mic_tmp = Path(str(output) + ".mic.tmp.wav")
+        has_sys = sys_tmp.exists() and sys_tmp.stat().st_size > _WAV_HEADER_SIZE
+        has_mic = mic_tmp.exists() and mic_tmp.stat().st_size > _WAV_HEADER_SIZE
+
+        if not has_sys and not has_mic:
+            return
+        if not shutil.which("ffmpeg"):
+            logger.warning("ffmpeg not found — cannot recover audio from tmp files")
+            return
+
+        click.echo("\n  Recovering audio from temp files...", err=True)
+        try:
+            if has_sys and has_mic:
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y", "-loglevel", "error",
+                        "-i", str(mic_tmp), "-i", str(sys_tmp),
+                        "-filter_complex",
+                        "[0:a]aresample=24000[mic];[mic][1:a]amix=inputs=2:duration=longest[out]",
+                        "-map", "[out]", "-ar", "24000", "-ac", "1",
+                        "-c:a", "pcm_f32le", str(output),
+                    ],
+                    check=True, capture_output=True,
+                )
+            elif has_sys:
+                sys_tmp.rename(output)
+            elif has_mic:
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y", "-loglevel", "error",
+                        "-i", str(mic_tmp), "-ar", "24000", "-ac", "1",
+                        "-c:a", "pcm_f32le", str(output),
+                    ],
+                    check=True, capture_output=True,
+                )
+
+            if output.exists() and output.stat().st_size > _WAV_HEADER_SIZE:
+                sys_tmp.unlink(missing_ok=True)
+                mic_tmp.unlink(missing_ok=True)
+                click.echo("  Audio recovered successfully.", err=True)
+            else:
+                click.echo("  Recovery produced empty file.", err=True)
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode(errors="replace") if e.stderr else ""
+            logger.warning("ffmpeg recovery failed: %s", stderr)
+            click.echo(f"  Recovery failed: {stderr}", err=True)
 
     def list_devices(self) -> str:
         """List available audio devices using the Swift helper."""
