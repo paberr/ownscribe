@@ -74,6 +74,7 @@ def _create_recorder(config: Config):
         recorder = CoreAudioRecorder(
             mic=config.audio.mic,
             mic_device=config.audio.mic_device,
+            capture_mode=config.audio.capture_mode,
             silence_timeout=config.audio.silence_timeout,
         )
         if recorder.is_available():

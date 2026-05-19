@@ -16,6 +16,7 @@ backend = "coreaudio"     # "coreaudio" (default) or "sounddevice"
 device = ""               # empty = system audio; or device name/index for sounddevice
 mic = false               # also capture microphone input
 mic_device = ""           # specific mic device name (empty = default)
+capture_mode = "picker"   # "picker" = show source picker; "all" = capture all system audio directly
 silence_timeout = 300     # seconds of silence before auto-stop; 0 = disabled
 
 [transcription]
@@ -56,6 +57,7 @@ class AudioConfig:
     device: str = ""
     mic: bool = False
     mic_device: str = ""
+    capture_mode: str = "picker"  # "picker" = show source picker; "all" = all system audio
     silence_timeout: int = 300  # seconds of silence before auto-stop; 0 = disabled
 
 
