@@ -78,7 +78,10 @@ def _find_binary() -> Path | None:
 class CoreAudioRecorder(AudioRecorder):
     """Records system audio using the ownscribe-audio Swift helper."""
 
-    def __init__(self, mic: bool = False, mic_device: str = "", capture_mode: str = "picker", silence_timeout: int = 0) -> None:
+    def __init__(
+        self, mic: bool = False, mic_device: str = "",
+        capture_mode: str = "picker", silence_timeout: int = 0,
+    ) -> None:
         self._mic = mic
         self._mic_device = mic_device
         self._capture_mode = capture_mode
