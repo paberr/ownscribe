@@ -120,6 +120,8 @@ This will:
 3. Summarize with your local LLM
 4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMMSS/`
 
+> **Note:** By default, macOS shows a source picker on each launch so you can choose what to capture. To skip it and always record all system audio, set `capture_mode = "all"` in the `[audio]` config section.
+
 On first run, WhisperX / pyannote and the summarization model may download model files. ownscribe shows a `Preparing models` step and best-effort download progress in the TUI while this happens. Use `ownscribe warmup` to pre-download all models.
 
 ### Options
@@ -187,6 +189,7 @@ backend = "coreaudio"     # "coreaudio" or "sounddevice"
 device = ""               # empty = system audio
 mic = false               # also capture microphone input
 mic_device = ""           # specific mic device name (empty = default)
+capture_mode = "picker"   # "picker" = show source picker; "all" = capture all system audio directly
 silence_timeout = 300     # seconds of silence before auto-stop; 0 = disabled
 
 [transcription]
