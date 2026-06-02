@@ -110,11 +110,10 @@ class LlamaCppSummarizer(Summarizer):
 
     def __del__(self) -> None:
         """Ensure the model is properly closed on cleanup."""
-        if self._llm is not None:
-            try:
-                self._llm.close()
-            except Exception:
-                pass
+        llm = getattr(self, "_llm", None)
+        if llm is not None:
+            with contextlib.suppress(Exception):
+                llm.close()
 
     def _get_llm(self) -> Llama:
         """Lazy-load the model on first use."""
