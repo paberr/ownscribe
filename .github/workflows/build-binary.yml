@@ -2,7 +2,7 @@ name: Build Swift Binary
 
 on:
   release:
-    types: [created]
+    types: [published]
 
 permissions:
   contents: write
