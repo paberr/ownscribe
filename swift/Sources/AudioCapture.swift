@@ -44,6 +44,11 @@ class MicCapture {
     private var fileFormat: AVAudioFormat?
     private var audioConverter: AVAudioConverter?
 
+    // Set when a write/convert failure has been logged; reset on the next successful write
+    // so a persistent failure logs once instead of once per tap buffer (~10+/sec). Touched
+    // only from writeBuffer on the tap (render) thread, so it needs no locking.
+    private var loggedWriteError = false
+
     // Remembered so an explicitly named device can be re-applied after a route change.
     private var micDeviceName: String?
 
@@ -186,13 +191,14 @@ class MicCapture {
         do {
             if buffer.format == fileFormat {
                 try audioFile.write(from: buffer)
+                loggedWriteError = false
                 return
             }
             if audioConverter?.inputFormat != buffer.format {
                 audioConverter = AVAudioConverter(from: buffer.format, to: fileFormat)
             }
             guard let converter = audioConverter else {
-                fputs("Mic converter unavailable for format \(buffer.format)\n", stderr)
+                logWriteErrorOnce("Mic convert error: converter unavailable for format \(buffer.format)")
                 return
             }
             let ratio = fileFormat.sampleRate / buffer.format.sampleRate
@@ -211,15 +217,25 @@ class MicCapture {
                 return buffer
             }
             if status == .error || convError != nil {
-                fputs("Mic convert error: \(convError?.description ?? "unknown")\n", stderr)
+                logWriteErrorOnce("Mic convert error: \(convError?.description ?? "unknown")")
                 return
             }
             if outBuffer.frameLength > 0 {
                 try audioFile.write(from: outBuffer)
+                loggedWriteError = false
             }
         } catch {
-            fputs("Mic write error: \(error)\n", stderr)
+            logWriteErrorOnce("Mic write error: \(error)")
         }
+    }
+
+    /// Log a recurring write/convert failure only once until the next successful write, so a
+    /// persistent bad state (e.g. an unconvertible format) doesn't flood stderr at the tap
+    /// rate. Reset by writeBuffer on every successful write. Render-thread only — no locking.
+    private func logWriteErrorOnce(_ message: String) {
+        guard !loggedWriteError else { return }
+        loggedWriteError = true
+        fputs(message + "\n", stderr)
     }
 
     /// Rebind the input and reinstall the tap after an audio route change. Runs on
@@ -235,7 +251,7 @@ class MicCapture {
     /// the *format*, not the device, so the converter absorbs it with no gap at all.
     private func handleConfigChange() {
         guard !isStopping else { return }
-        fputs("[MIC_RECONFIG] Audio route changed; rebinding microphone input.\n", stderr)
+        fputs("Mic reconfigure: audio route changed; rebinding microphone input.\n", stderr)
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         do {
