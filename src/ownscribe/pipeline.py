@@ -66,6 +66,24 @@ def _get_output_dir(config: Config) -> Path:
     return out_dir
 
 
+def _get_output_audio_dir(config: Config, out_dir: Path) -> Path:
+    """Create and return the audio directory for a run, mirroring out_dir's name."""
+    audio_dir = config.output.resolved_audio_dir / out_dir.name
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    return audio_dir
+
+
+def _rename_output_dir(directory: Path, title_slug: str) -> Path:
+    """Append title slug to directory name. Returns the new path."""
+    new_dir = directory.parent / f"{directory.name}_{title_slug}"
+    try:
+        directory.rename(new_dir)
+        return new_dir
+    except Exception:
+        logging.getLogger(__name__).warning("Could not rename output directory", exc_info=True)
+        return directory
+
+
 def _create_recorder(config: Config):
     """Create the appropriate audio recorder based on config."""
     if config.audio.backend == "coreaudio" and not config.audio.device:
@@ -154,7 +172,8 @@ def _generate_title_slug(summary: str, summarizer) -> str:
 def run_pipeline(config: Config) -> None:
     """Run the full pipeline: record, transcribe, summarize, output."""
     out_dir = _get_output_dir(config)
-    audio_path = out_dir / "recording.wav"
+    audio_dir = _get_output_audio_dir(config, out_dir)
+    audio_path = audio_dir / "recording.wav"
 
     # 1. Record
     recorder = _create_recorder(config)
@@ -382,12 +401,12 @@ def run_summarize(config: Config, transcript_file: str) -> None:
     summary_path.write_text(summary_md)
 
     if title_slug:
-        new_dir = out_dir.parent / f"{out_dir.name}_{title_slug}"
-        try:
-            out_dir.rename(new_dir)
-            out_dir = new_dir
-        except Exception:
-            logging.getLogger(__name__).warning("Could not rename output directory", exc_info=True)
+        audio_dir = config.output.resolved_audio_dir / out_dir.name
+        out_dir, old_out_dir = _rename_output_dir(out_dir, title_slug), out_dir
+        # Rename audio_dir only if it's separate from out_dir
+        # and if out_dir was successfully renamed.
+        if audio_dir != old_out_dir and out_dir != old_out_dir:
+            _rename_output_dir(audio_dir, title_slug)
 
     summary_path = out_dir / "summary.md"
 
@@ -496,21 +515,20 @@ def _do_transcribe_and_summarize(
         click.echo(f"Summary saved to {out_dir / f'summary.{ext}'}")
         click.echo(f"\n{summary_str or summary}")
         if title_slug:
-            new_dir = out_dir.parent / f"{out_dir.name}_{title_slug}"
-            try:
-                out_dir.rename(new_dir)
-                out_dir = new_dir
-            except Exception:
-                logging.getLogger(__name__).warning("Could not rename output directory", exc_info=True)
+            audio_dir = audio_path.parent
+            out_dir, old_out_dir = _rename_output_dir(out_dir, title_slug), out_dir
+            # Rename audio_dir only if it's separate from out_dir
+            # and if out_dir was successfully renamed.
+            if audio_dir != old_out_dir and out_dir != old_out_dir:
+                audio_dir = _rename_output_dir(audio_dir, title_slug)
+            audio_path = audio_dir / audio_path.name
     elif not summarize:
         click.echo(f"\n{transcript_str}")
 
-    # Delete recording if configured — use the (possibly renamed) out_dir
-    if not config.output.keep_recording:
-        actual_audio_path = out_dir / audio_path.name
-        if actual_audio_path.exists():
-            actual_audio_path.unlink()
-            click.echo(f"Recording deleted (keep_recording=false): {actual_audio_path}")
+    # Delete recording if configured — use the (possibly renamed) audio_path
+    if not config.output.keep_recording and audio_path.exists():
+        audio_path.unlink()
+        click.echo(f"Recording deleted (keep_recording=false): {audio_path}")
 
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"}
@@ -555,7 +573,14 @@ def run_resume(config: Config, directory: str) -> None:
         click.echo(f"Error: {dir_path} is not a directory.", err=True)
         raise SystemExit(1)
 
+    # First look for an audio file in the target directory, since the user is
+    # explicitly resuming there. If none is found and a separate directory is
+    # configured for audio, search that directory as well.
     audio = _find_audio(dir_path)
+    if audio is None:
+        candidate = config.output.resolved_audio_dir / dir_path.name
+        if candidate != dir_path and candidate.is_dir():
+            audio = _find_audio(candidate)
     transcript = _find_transcript(dir_path)
     summary = _find_summary(dir_path)
 

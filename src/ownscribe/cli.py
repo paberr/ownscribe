@@ -265,6 +265,7 @@ def cleanup(
     """Remove ownscribe data from disk (config, cache, recordings)."""
     cfg = ctx.obj["config"]
     output_dir = str(cfg.output.resolved_dir)
+    audio_dir = str(cfg.output.resolved_audio_dir)
 
     targets: list[tuple[str, str]] = []
 
@@ -274,6 +275,8 @@ def cleanup(
             ("Cache", _CACHE_DIR),
             ("Output", output_dir),
         ]
+        if audio_dir != output_dir:
+            targets.append(("Audio", audio_dir))
     elif config_ or cache or output:
         if config_:
             targets.append(("Config", _CONFIG_DIR))
@@ -281,13 +284,18 @@ def cleanup(
             targets.append(("Cache", _CACHE_DIR))
         if output:
             targets.append(("Output", output_dir))
+            if audio_dir != output_dir:
+                targets.append(("Audio", audio_dir))
     else:
-        # Interactive: prompt for each directory
-        for label, path in [
+        targets = [
             ("Config", _CONFIG_DIR),
             ("Cache", _CACHE_DIR),
             ("Output", output_dir),
-        ]:
+        ]
+        if audio_dir != output_dir:
+            targets.append(("Audio", audio_dir))
+        # Interactive: prompt for each directory
+        for label, path in targets:
             size = _dir_size(path)
             if size == "(not found)":
                 click.echo(f"  {label}: {path} — {size}, skipping")

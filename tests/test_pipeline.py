@@ -333,6 +333,66 @@ class TestDoTranscribeAndSummarize:
         assert "Hello world." in (tmp_path / "transcript.md").read_text()
         assert not (tmp_path / "summary.md").exists()
 
+    def test_separate_audio_dir_renamed_alongside_out_dir(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.summarization.enabled = True
+
+        out_dir = tmp_path / "notes" / "2026-01-01_1200"
+        out_dir.mkdir(parents=True)
+        audio_dir = tmp_path / "audio-cache" / "2026-01-01_1200"
+        audio_dir.mkdir(parents=True)
+        audio_path = audio_dir / "recording.wav"
+        audio_path.write_bytes(b"fake audio data")
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = self._make_transcript()
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = "Budget Review"
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            _do_transcribe_and_summarize(config, audio_path, out_dir, summarize=True)
+
+        renamed_out_dir = out_dir.parent / "2026-01-01_1200_budget-review"
+        renamed_audio_dir = audio_dir.parent / "2026-01-01_1200_budget-review"
+        assert (renamed_out_dir / "transcript.md").exists()
+        assert (renamed_out_dir / "summary.md").exists()
+        assert (renamed_audio_dir / "recording.wav").exists()
+        assert not out_dir.exists()
+        assert not audio_dir.exists()
+
+    def test_keep_recording_false_deletes_from_separate_audio_dir(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.output.keep_recording = False
+
+        out_dir = tmp_path / "notes" / "2026-01-01_1200"
+        out_dir.mkdir(parents=True)
+        audio_dir = tmp_path / "audio-cache" / "2026-01-01_1200"
+        audio_dir.mkdir(parents=True)
+        audio_path = audio_dir / "recording.wav"
+        audio_path.write_bytes(b"fake audio data")
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = self._make_transcript()
+
+        with mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber):
+            _do_transcribe_and_summarize(config, audio_path, out_dir, summarize=False)
+
+        assert (out_dir / "transcript.md").exists()
+        assert not audio_path.exists()
+
 
 class TestRunWarmup:
     def test_run_warmup_calls_prepare_models(self):
@@ -407,6 +467,70 @@ class TestRunWarmup:
             run_warmup(config)
 
         mock_ensure.assert_not_called()
+
+
+class TestRunPipelineAudioLocation:
+    """Test that run_pipeline records into the configured audio_dir."""
+
+    def _make_recorder_mock(self):
+        recorder = mock.MagicMock()
+        recorder.is_recording = False  # skip the recording loop immediately
+        recorder.is_muted = False
+        recorder.silence_timed_out = False
+        recorder.silence_warning = False
+
+        def _start(path):
+            # Must exceed _WAV_HEADER_SIZE (44 bytes) or run_pipeline treats it as empty.
+            path.write_bytes(b"fake audio data, definitely more than 44 bytes")
+
+        recorder.start.side_effect = _start
+        return recorder
+
+    def test_audio_recorded_into_separate_audio_dir(self, tmp_path):
+        from ownscribe.pipeline import run_pipeline
+
+        config = Config()
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
+
+        mock_recorder = self._make_recorder_mock()
+
+        with (
+            mock.patch("ownscribe.pipeline._create_recorder", return_value=mock_recorder),
+            mock.patch("ownscribe.pipeline._do_transcribe_and_summarize") as mock_ts,
+        ):
+            run_pipeline(config)
+
+        # The recorder was pointed at a file under audio_dir, not dir.
+        audio_path = mock_recorder.start.call_args[0][0]
+        assert audio_path.is_relative_to(tmp_path / "audio-cache")
+        assert not audio_path.is_relative_to(tmp_path / "notes")
+        assert audio_path.exists()
+
+        # Downstream processing still receives the audio dir's out_dir counterpart.
+        called_audio_path, called_out_dir = mock_ts.call_args[0][1], mock_ts.call_args[0][2]
+        assert called_audio_path == audio_path
+        assert called_out_dir.is_relative_to(tmp_path / "notes")
+        assert called_out_dir.name == audio_path.parent.name
+
+    def test_audio_recorded_into_dir_when_audio_dir_unset(self, tmp_path):
+        from ownscribe.pipeline import run_pipeline
+
+        config = Config()
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = ""
+
+        mock_recorder = self._make_recorder_mock()
+
+        with (
+            mock.patch("ownscribe.pipeline._create_recorder", return_value=mock_recorder),
+            mock.patch("ownscribe.pipeline._do_transcribe_and_summarize"),
+        ):
+            run_pipeline(config)
+
+        audio_path = mock_recorder.start.call_args[0][0]
+        assert audio_path.is_relative_to(tmp_path / "notes")
+        assert audio_path.parent.parent == tmp_path / "notes"
 
 
 class TestRunTranscribeColocation:
@@ -523,6 +647,24 @@ class TestResume:
         with mock.patch("ownscribe.pipeline._do_transcribe_and_summarize") as mock_ts:
             run_resume(config, str(tmp_path))
             mock_ts.assert_called_once_with(config, audio_path, tmp_path)
+
+    def test_finds_audio_in_separate_audio_dir(self, tmp_path):
+        from ownscribe.pipeline import run_resume
+
+        text_dir = tmp_path / "notes" / "2026-01-01_1200"
+        text_dir.mkdir(parents=True)
+        audio_dir = tmp_path / "audio-cache" / "2026-01-01_1200"
+        audio_dir.mkdir(parents=True)
+        audio_path = audio_dir / "recording.wav"
+        audio_path.touch()
+
+        config = Config()
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
+
+        with mock.patch("ownscribe.pipeline._do_transcribe_and_summarize") as mock_ts:
+            run_resume(config, str(text_dir))
+            mock_ts.assert_called_once_with(config, audio_path, text_dir)
 
     def test_finds_json_transcript(self, tmp_path):
         from ownscribe.pipeline import run_resume

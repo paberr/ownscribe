@@ -183,6 +183,32 @@ class TestCleanup:
         assert "Removed Cache" in result.output
         assert "Removed Output" in result.output
 
+    def test_all_yes_removes_separate_audio_dir(self, tmp_path):
+        config_dir = tmp_path / "config"
+        cache_dir = tmp_path / "cache"
+        output_dir = tmp_path / "output"
+        audio_dir = tmp_path / "audio-cache"
+        for d in (config_dir, cache_dir, output_dir, audio_dir):
+            d.mkdir()
+            (d / "file.txt").write_text("data")
+
+        cfg = Config()
+        cfg.output.dir = str(output_dir)
+        cfg.output.audio_dir = str(audio_dir)
+
+        runner = CliRunner()
+        with (
+            _mock_config(cfg),
+            mock.patch("ownscribe.cli._CONFIG_DIR", str(config_dir)),
+            mock.patch("ownscribe.cli._CACHE_DIR", str(cache_dir)),
+        ):
+            result = runner.invoke(cli, ["cleanup", "--all", "--yes"])
+
+        assert result.exit_code == 0
+        assert not output_dir.exists()
+        assert not audio_dir.exists()
+        assert "Removed Audio" in result.output
+
     def test_config_only(self, tmp_path):
         config_dir = tmp_path / "config"
         cache_dir = tmp_path / "cache"
@@ -206,6 +232,24 @@ class TestCleanup:
         assert not config_dir.exists()
         assert cache_dir.exists()
         assert output_dir.exists()
+
+    def test_output_only_also_removes_audio_dir(self, tmp_path):
+        output_dir = tmp_path / "output"
+        audio_dir = tmp_path / "audio-cache"
+        output_dir.mkdir()
+        audio_dir.mkdir()
+
+        cfg = Config()
+        cfg.output.dir = str(output_dir)
+        cfg.output.audio_dir = str(audio_dir)
+
+        runner = CliRunner()
+        with _mock_config(cfg):
+            result = runner.invoke(cli, ["cleanup", "--output", "--yes"])
+
+        assert result.exit_code == 0
+        assert not output_dir.exists()
+        assert not audio_dir.exists()
 
     def test_skips_missing_dirs(self, tmp_path):
         cfg = Config()

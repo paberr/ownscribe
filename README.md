@@ -246,6 +246,7 @@ model = "phi-4-mini"      # local: "phi-4-mini", path to GGUF, or hf:owner/repo/
 
 [output]
 dir = "~/ownscribe"
+audio_dir = ""            # directory for audio recordings; empty = same as dir
 format = "markdown"       # "markdown" or "json"
 keep_recording = true     # false = auto-delete WAV after transcription
 ```

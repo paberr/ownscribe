@@ -49,6 +49,7 @@ model = "phi-4-mini"      # local: "phi-4-mini", path to GGUF, or hf:owner/repo/
 
 [output]
 dir = "~/ownscribe"       # base output directory
+audio_dir = ""            # directory for audio recordings; empty = same as dir
 format = "markdown"       # "markdown" or "json"
 keep_recording = true     # keep WAV files after transcription; false = auto-delete
 """
@@ -102,12 +103,17 @@ class TemplateConfig:
 @dataclass
 class OutputConfig:
     dir: str = "~/ownscribe"
+    audio_dir: str = ""
     format: str = "markdown"
     keep_recording: bool = True
 
     @property
     def resolved_dir(self) -> Path:
         return Path(self.dir).expanduser()
+
+    @property
+    def resolved_audio_dir(self) -> Path:
+        return Path(self.audio_dir).expanduser() if self.audio_dir else self.resolved_dir
 
 
 @dataclass
