@@ -92,6 +92,15 @@ uv add 'ownscribe[openai]'   # use any OpenAI-compatible server (LM Studio, llam
 uv add 'ownscribe[all]'      # install both
 ```
 
+### Homebrew
+
+There is no brew formula: Homebrew builds Python dependencies from source, which doesn't work well for the PyTorch and llama-cpp-python stack. The closest thing is installing [uv](https://docs.astral.sh/uv/) via brew and letting it manage a global `ownscribe` command:
+
+```bash
+brew install uv
+uv tool install 'ownscribe[all]'
+```
+
 ### From source
 
 ```bash
