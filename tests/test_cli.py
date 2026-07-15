@@ -30,13 +30,20 @@ class TestMainCommand:
             config = mock_run.call_args[0][0]
             assert config.summarization.enabled is False
 
-    def test_mic_flag(self):
+    def test_no_mic_flag(self):
         runner = CliRunner()
         with _mock_config(), mock.patch("ownscribe.pipeline.run_pipeline") as mock_run:
-            result = runner.invoke(cli, ["--mic"])
+            result = runner.invoke(cli, ["--no-mic"])
             assert result.exit_code == 0
             config = mock_run.call_args[0][0]
-            assert config.audio.mic is True
+            assert config.audio.mic is False
+
+    def test_no_mic_with_mic_device_errors(self):
+        runner = CliRunner()
+        with _mock_config():
+            result = runner.invoke(cli, ["--no-mic", "--mic-device", "USB Mic"])
+            assert result.exit_code != 0
+            assert "--no-mic and --mic-device cannot be used together" in result.output
 
     def test_device_flag(self):
         runner = CliRunner()

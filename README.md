@@ -135,23 +135,23 @@ then call `ownscribe` directly. The examples in [Usage](#usage) use the bare
 ### Record, transcribe, and summarize a meeting
 
 ```bash
-ownscribe                    # records system audio, Ctrl+C to stop
+ownscribe                    # records system audio + mic, Ctrl+C to stop
 ```
 
 This will:
-1. Capture system audio until you press Ctrl+C (or auto-stop after 5 minutes of silence)
+1. Capture system audio and your microphone until you press Ctrl+C (or auto-stop after 5 minutes of silence)
 2. Transcribe with WhisperX
 3. Summarize with your local LLM
 4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMMSS/`
 
-> **Note:** By default, macOS shows a source picker on each launch so you can choose what to capture. To skip it and always record all system audio, set `capture_mode = "all"` in the `[audio]` config section.
+> **Note:** By default, ownscribe records all system audio directly with no prompt. To show a macOS source picker on each launch instead, set `capture_mode = "picker"` in the `[audio]` config section.
 
 On first run, WhisperX / pyannote and the summarization model may download model files. ownscribe shows a `Preparing models` step and best-effort download progress in the TUI while this happens. Use `ownscribe warmup` to pre-download all models.
 
 ### Options
 
 ```bash
-ownscribe --mic                               # capture system audio + default mic (press 'm' to mute/unmute)
+ownscribe --no-mic                            # capture system audio only (mic is on by default; press 'm' to mute/unmute)
 ownscribe --mic-device "MacBook Pro Microphone" # capture system audio + specific mic
 ownscribe --device "MacBook Pro Microphone"   # use mic instead of system audio
 ownscribe --no-summarize                      # skip LLM summarization
@@ -213,9 +213,9 @@ Config is stored at `~/.config/ownscribe/config.toml`. Run `ownscribe config` to
 [audio]
 backend = "coreaudio"     # "coreaudio" or "sounddevice"
 device = ""               # empty = system audio
-mic = false               # also capture microphone input
+mic = true                # also capture microphone input
 mic_device = ""           # specific mic device name (empty = default)
-capture_mode = "picker"   # "picker" = show source picker; "all" = capture all system audio directly
+capture_mode = "all"      # "all" = capture all system audio directly; "picker" = show source picker
 silence_timeout = 300     # seconds of silence before auto-stop; 0 = disabled
 
 [transcription]

@@ -29,8 +29,12 @@ class TestDefaults:
 
     def test_default_mic_settings(self):
         cfg = Config()
-        assert cfg.audio.mic is False
+        assert cfg.audio.mic is True
         assert cfg.audio.mic_device == ""
+
+    def test_default_capture_mode(self):
+        cfg = Config()
+        assert cfg.audio.capture_mode == "all"
 
     def test_default_diarization_telemetry_off(self):
         cfg = Config()

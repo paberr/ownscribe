@@ -39,7 +39,11 @@ def _dir_size(path: str) -> str:
 @click.option("--language", default=None, help="Language code for transcription (e.g. en, de, fr).")
 @click.option("--initial-prompt", default=None, help="Context text to prime Whisper (vocab, speaker names, etc.)")
 @click.option("--hotwords", default=None, help="Comma-separated words to boost Whisper recognition.")
-@click.option("--mic", is_flag=True, help="Also capture microphone input (mixed with system audio).")
+@click.option(
+    "--mic/--no-mic",
+    default=None,
+    help="Also capture microphone input (mixed with system audio); on by default.",
+)
 @click.option("--mic-device", default=None, help="Specific mic device name (implies --mic).")
 @click.option(
     "--keep-recording/--no-keep-recording",
@@ -62,7 +66,7 @@ def cli(
     language: str | None,
     initial_prompt: str | None,
     hotwords: str | None,
-    mic: bool,
+    mic: bool | None,
     mic_device: str | None,
     keep_recording: bool | None,
     template: str | None,
@@ -94,9 +98,12 @@ def cli(
         config.transcription.initial_prompt = initial_prompt
     if hotwords:
         config.transcription.hotwords = hotwords
-    if mic or mic_device:
-        config.audio.mic = True
+    if mic is False and mic_device:
+        raise click.UsageError("--no-mic and --mic-device cannot be used together.")
+    if mic is not None:
+        config.audio.mic = mic
     if mic_device:
+        config.audio.mic = True
         config.audio.mic_device = mic_device
     if keep_recording is not None:
         config.output.keep_recording = keep_recording
