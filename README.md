@@ -104,6 +104,10 @@ bash swift/build.sh
 
 # Install with all backends
 uv sync --extra all
+
+# Make the `ownscribe` command available globally (editable: changes to the
+# checkout take effect without reinstalling)
+uv tool install --editable .
 ```
 
 When installed from source, the `ownscribe` command lives inside the project's
