@@ -7,7 +7,7 @@ license = "MIT"
 authors = [
     { name = "Pascal Berrang", email = "git@p4l.dev" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 keywords = ["meeting", "transcription", "summarization", "whisper", "local", "privacy"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -25,6 +25,10 @@ dependencies = [
     "soundfile>=0.13",
     "whisperx>=3.8",
     "pyannote-audio>=4.0",
+    # torchaudio 2.9 removed list_audio_backends(), which pyannote-audio still
+    # calls; drop this cap and the <3.14 python cap once fixed upstream
+    # (pyannote/pyannote-audio#1974).
+    "torchaudio>=2.8,<2.9",
     "llama-cpp-python>=0.3",
     "huggingface-hub>=0.20",
 ]
