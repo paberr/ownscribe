@@ -287,15 +287,15 @@ def cleanup(
             if audio_dir != output_dir:
                 targets.append(("Audio", audio_dir))
     else:
-        targets = [
+        candidates = [
             ("Config", _CONFIG_DIR),
             ("Cache", _CACHE_DIR),
             ("Output", output_dir),
         ]
         if audio_dir != output_dir:
-            targets.append(("Audio", audio_dir))
+            candidates.append(("Audio", audio_dir))
         # Interactive: prompt for each directory
-        for label, path in targets:
+        for label, path in candidates:
             size = _dir_size(path)
             if size == "(not found)":
                 click.echo(f"  {label}: {path} — {size}, skipping")

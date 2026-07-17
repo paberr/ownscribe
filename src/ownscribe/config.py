@@ -115,6 +115,9 @@ class OutputConfig:
     def resolved_audio_dir(self) -> Path:
         return Path(self.audio_dir).expanduser() if self.audio_dir else self.resolved_dir
 
+    @property
+    def uses_separate_audio_dir(self) -> bool:
+        return self.resolved_audio_dir != self.resolved_dir
 
 @dataclass
 class Config:
