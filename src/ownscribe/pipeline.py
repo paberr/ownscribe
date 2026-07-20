@@ -405,7 +405,13 @@ def run_summarize(config: Config, transcript_file: str) -> None:
         # If a separate audio_dir is configured, rename like out_dir, but only
         # if audio_dir actually exists -- run_summarize can run on a transcript
         # regardless of a recording -- and if out_dir was renamed successfully.
-        if config.output.uses_separate_audio_dir:
+        # Require the transcript to live in the output tree so summarizing a
+        # transcript elsewhere cannot rename an unrelated audio directory whose
+        # name happens to match.
+        if (
+            config.output.uses_separate_audio_dir
+            and old_out_dir.parent == config.output.resolved_dir
+        ):
             audio_dir = config.output.resolved_audio_dir / old_out_dir.name
             if audio_dir.is_dir() and out_dir != old_out_dir:
                 _rename_output_dir(audio_dir, title_slug)
@@ -519,12 +525,15 @@ def _do_transcribe_and_summarize(
         if title_slug:
             out_dir, old_out_dir = _rename_output_dir(out_dir, title_slug), out_dir
             audio_dir = audio_path.parent
-            # If a separate audio_dir is configured, rename like out_dir, but
-            # only if out_dir was renamed successfully.
-            if config.output.uses_separate_audio_dir:
+            # If the audio lives in its own directory (separate audio_dir
+            # configured and the recording not colocated with the text output,
+            # as when resuming a directory recorded before audio_dir was set),
+            # rename it like out_dir, but only if out_dir was renamed
+            # successfully.
+            if config.output.uses_separate_audio_dir and audio_dir != old_out_dir:
                 if out_dir != old_out_dir:
                     audio_dir = _rename_output_dir(audio_dir, title_slug)
-            # If no separate audio_dir is configured, adjust audio_dir and
+            # Otherwise the audio follows out_dir: adjust audio_dir and
             # audio_path according to the new name of out_dir.
             else:
                 audio_dir = out_dir
@@ -538,7 +547,7 @@ def _do_transcribe_and_summarize(
         # Also remove the parent directory if it is now empty, which is expected
         # when a separate audio_dir is configured.
         if not any(audio_path.parent.iterdir()):
-            audio_path.parent.unlink()
+            audio_path.parent.rmdir()
         click.echo(f"Recording deleted (keep_recording=false): {audio_path}")
 
 

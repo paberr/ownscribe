@@ -339,6 +339,8 @@ class TestDoTranscribeAndSummarize:
         config = Config()
         config.output.format = "markdown"
         config.summarization.enabled = True
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
 
         out_dir = tmp_path / "notes" / "2026-01-01_1200"
         out_dir.mkdir(parents=True)
@@ -376,6 +378,8 @@ class TestDoTranscribeAndSummarize:
         config = Config()
         config.output.format = "markdown"
         config.output.keep_recording = False
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
 
         out_dir = tmp_path / "notes" / "2026-01-01_1200"
         out_dir.mkdir(parents=True)
@@ -392,6 +396,46 @@ class TestDoTranscribeAndSummarize:
 
         assert (out_dir / "transcript.md").exists()
         assert not audio_path.exists()
+        assert not audio_dir.exists()
+
+    def test_colocated_audio_follows_rename_despite_separate_audio_dir(self, tmp_path):
+        """Resuming a directory that holds its own recording (made before
+        audio_dir was configured) must follow out_dir's rename, not try to
+        rename the audio's directory a second time."""
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.output.keep_recording = False
+        config.summarization.enabled = True
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
+
+        out_dir = tmp_path / "notes" / "2026-01-01_1200"
+        out_dir.mkdir(parents=True)
+        audio_path = out_dir / "recording.wav"
+        audio_path.write_bytes(b"fake audio data")
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = self._make_transcript()
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = "Budget Review"
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            _do_transcribe_and_summarize(config, audio_path, out_dir, summarize=True)
+
+        renamed_out_dir = out_dir.parent / "2026-01-01_1200_budget-review"
+        assert (renamed_out_dir / "transcript.md").exists()
+        assert (renamed_out_dir / "summary.md").exists()
+        assert not (renamed_out_dir / "recording.wav").exists()
+        assert not out_dir.exists()
 
 
 class TestRunWarmup:
@@ -590,6 +634,72 @@ class TestRunSummarizeColocation:
 
         renamed_dir = tx_dir.parent / f"{tx_dir.name}_test-title"
         assert (renamed_dir / "summary.md").exists()
+
+    def test_renames_matching_audio_dir_inside_output_tree(self, tmp_path):
+        from ownscribe.pipeline import run_summarize
+
+        tx_dir = tmp_path / "notes" / "2026-01-01_1200"
+        tx_dir.mkdir(parents=True)
+        tx_path = tx_dir / "transcript.md"
+        tx_path.write_text("# Transcript\nHello world.")
+
+        audio_dir = tmp_path / "audio-cache" / "2026-01-01_1200"
+        audio_dir.mkdir(parents=True)
+        (audio_dir / "recording.wav").write_bytes(b"fake audio data")
+
+        config = Config()
+        config.summarization.enabled = True
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = "test-title"
+
+        with (
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            run_summarize(config, str(tx_path))
+
+        renamed_audio_dir = audio_dir.parent / f"{audio_dir.name}_test-title"
+        assert (renamed_audio_dir / "recording.wav").exists()
+        assert not audio_dir.exists()
+
+    def test_leaves_audio_dir_alone_for_transcript_outside_output_tree(self, tmp_path):
+        """A same-named directory under audio_dir must not be renamed when the
+        summarized transcript does not belong to the output tree."""
+        from ownscribe.pipeline import run_summarize
+
+        tx_dir = tmp_path / "elsewhere" / "2026-01-01_1200"
+        tx_dir.mkdir(parents=True)
+        tx_path = tx_dir / "transcript.md"
+        tx_path.write_text("# Transcript\nHello world.")
+
+        unrelated_audio_dir = tmp_path / "audio-cache" / "2026-01-01_1200"
+        unrelated_audio_dir.mkdir(parents=True)
+
+        config = Config()
+        config.summarization.enabled = True
+        config.output.dir = str(tmp_path / "notes")
+        config.output.audio_dir = str(tmp_path / "audio-cache")
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = "test-title"
+
+        with (
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            run_summarize(config, str(tx_path))
+
+        renamed_dir = tx_dir.parent / f"{tx_dir.name}_test-title"
+        assert (renamed_dir / "summary.md").exists()
+        assert unrelated_audio_dir.exists()
+        assert not (unrelated_audio_dir.parent / f"{tx_dir.name}_test-title").exists()
 
 
 class TestResume:
