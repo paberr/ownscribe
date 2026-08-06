@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 from unittest import mock
 
 from ownscribe.config import Config
@@ -173,6 +174,78 @@ class TestGenerateTitleSlug:
         mock_summarizer.generate_title.side_effect = Exception("LLM down")
 
         assert _generate_title_slug("summary", mock_summarizer) == ""
+
+
+class TestRenameOutputDir:
+    def test_renames_when_target_does_not_exist(self, tmp_path):
+        from ownscribe.pipeline import _rename_output_dir
+
+        source = tmp_path / "2026-01-01_1200"
+        source.mkdir()
+        (source / "transcript.md").write_text("hi")
+
+        result = _rename_output_dir(source, "budget-review")
+
+        expected = tmp_path / "2026-01-01_1200_budget-review"
+        assert result == expected
+        assert expected.exists()
+        assert not source.exists()
+
+    def test_skips_cleanly_when_target_exists_with_content(self, tmp_path, caplog):
+        from pathlib import Path
+
+        from ownscribe.pipeline import _rename_output_dir
+
+        source = tmp_path / "2026-01-01_1200"
+        source.mkdir()
+        (source / "transcript.md").write_text("hi")
+
+        target = tmp_path / "2026-01-01_1200_budget-review"
+        target.mkdir()
+        (target / "unrelated.txt").write_text("already here")
+
+        with mock.patch.object(Path, "rename") as mock_rename, caplog.at_level(logging.DEBUG):
+            result = _rename_output_dir(source, "budget-review")
+
+        mock_rename.assert_not_called()
+        assert not caplog.records
+        assert result == source
+        assert source.exists()
+        assert (target / "unrelated.txt").read_text() == "already here"
+
+    def test_renames_when_target_exists_but_is_empty(self, tmp_path):
+        from ownscribe.pipeline import _rename_output_dir
+
+        source = tmp_path / "2026-01-01_1200"
+        source.mkdir()
+        (source / "transcript.md").write_text("hi")
+
+        target = tmp_path / "2026-01-01_1200_budget-review"
+        target.mkdir()
+
+        result = _rename_output_dir(source, "budget-review")
+
+        assert result == target
+        assert (target / "transcript.md").read_text() == "hi"
+
+    def test_returns_original_on_unexpected_os_error(self, tmp_path, caplog):
+        from pathlib import Path
+
+        from ownscribe.pipeline import _rename_output_dir
+
+        source = tmp_path / "2026-01-01_1200"
+        source.mkdir()
+
+        with (
+            mock.patch.object(Path, "rename", side_effect=OSError("cross-device link")),
+            caplog.at_level(logging.DEBUG),
+        ):
+            result = _rename_output_dir(source, "budget-review")
+
+        assert result == source
+        assert source.exists()
+        assert caplog.records
+        assert all(record.levelno <= logging.DEBUG for record in caplog.records)
 
 
 class TestDoTranscribeAndSummarize:

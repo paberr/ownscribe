@@ -74,13 +74,17 @@ def _get_output_audio_dir(config: Config, out_dir: Path) -> Path:
 
 
 def _rename_output_dir(directory: Path, title_slug: str) -> Path:
-    """Append title slug to directory name. Returns the new path."""
+    """Append title slug to directory name. Returns the new path, or the
+    original if renaming isn't safely possible (e.g. the target already
+    exists with content, or the directory lives outside a renamable tree)."""
     new_dir = directory.parent / f"{directory.name}_{title_slug}"
+    if new_dir.exists() and any(new_dir.iterdir()):
+        return directory
     try:
         directory.rename(new_dir)
         return new_dir
-    except Exception:
-        logging.getLogger(__name__).warning("Could not rename output directory", exc_info=True)
+    except OSError:
+        logging.getLogger(__name__).debug("Could not rename output directory", exc_info=True)
         return directory
 
 
