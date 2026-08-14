@@ -89,6 +89,63 @@ class TestCreateRecorder:
             mock_sd.assert_called_once_with(device="USB Mic", silence_timeout=60)
 
 
+class TestUnsupportedAudioSettings:
+    """Flags the sounddevice backend cannot honour must warn, not be ignored."""
+
+    @staticmethod
+    def _create(config, capsys):
+        from ownscribe.pipeline import _create_recorder
+
+        with mock.patch("ownscribe.audio.sounddevice_recorder.SoundDeviceRecorder"):
+            _create_recorder(config)
+        return capsys.readouterr().err
+
+    def test_mic_device_warns(self, capsys):
+        config = Config()
+        config.audio.backend = "sounddevice"
+        config.audio.device = "USB Mic"
+        config.audio.mic_device = "MacBook Pro Microphone"
+
+        assert "--mic-device" in self._create(config, capsys)
+
+    def test_no_mic_warns(self, capsys):
+        config = Config()
+        config.audio.backend = "sounddevice"
+        config.audio.device = "USB Mic"
+        config.audio.mic = False
+
+        assert "--no-mic" in self._create(config, capsys)
+
+    def test_capture_mode_warns(self, capsys):
+        config = Config()
+        config.audio.backend = "sounddevice"
+        config.audio.device = "USB Mic"
+        config.audio.capture_mode = "picker"
+
+        assert "capture_mode" in self._create(config, capsys)
+
+    def test_defaults_do_not_warn(self, capsys):
+        config = Config()
+        config.audio.backend = "sounddevice"
+        config.audio.device = "USB Mic"
+
+        assert self._create(config, capsys) == ""
+
+    def test_coreaudio_backend_honours_the_flags(self):
+        from ownscribe.pipeline import _create_recorder
+
+        config = Config()
+        config.audio.backend = "coreaudio"
+        config.audio.device = ""
+        config.audio.mic_device = "USB Mic"
+
+        with mock.patch("ownscribe.audio.coreaudio.CoreAudioRecorder") as mock_cls:
+            mock_cls.return_value.is_available.return_value = True
+            _create_recorder(config)
+
+        assert mock_cls.call_args.kwargs["mic_device"] == "USB Mic"
+
+
 class TestFormatOutput:
     def test_markdown_format(self, sample_transcript):
         from ownscribe.pipeline import _format_output

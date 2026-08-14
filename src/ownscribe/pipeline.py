@@ -91,6 +91,23 @@ def _rename_output_dir(directory: Path, title_slug: str) -> Path:
         return directory
 
 
+def _unsupported_sounddevice_settings(config: Config) -> list[str]:
+    """Audio settings the sounddevice backend cannot honour.
+
+    It records one input device and cannot mix in system audio, pick a separate
+    mic, or turn the mic off, so these settings would otherwise be accepted and
+    then quietly ignored.
+    """
+    unsupported = []
+    if config.audio.mic_device:
+        unsupported.append("--mic-device")
+    if not config.audio.mic:
+        unsupported.append("--no-mic")
+    if config.audio.capture_mode != "all":
+        unsupported.append(f"capture_mode = {config.audio.capture_mode!r}")
+    return unsupported
+
+
 def _create_recorder(config: Config):
     """Create the appropriate audio recorder based on config."""
     if config.audio.backend == "coreaudio" and not config.audio.device:
@@ -107,6 +124,13 @@ def _create_recorder(config: Config):
         click.echo("Core Audio helper not found, falling back to sounddevice.")
 
     from ownscribe.audio.sounddevice_recorder import SoundDeviceRecorder
+
+    if ignored := _unsupported_sounddevice_settings(config):
+        click.echo(
+            f"Warning: the sounddevice backend ignores {', '.join(ignored)}.\n"
+            "It records a single input device; choose which one with --device.",
+            err=True,
+        )
 
     device = config.audio.device or None
     # Try to parse as int (device index)
