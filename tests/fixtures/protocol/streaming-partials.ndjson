@@ -1,0 +1,20 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["asr","capture","diarize","embed","stream"],"models":{"asr":"parakeet-tdt-0.6b-v3"}}
+{"type":"state","stage":"capturing","status":"begin"}
+{"type":"state","stage":"transcribing","status":"begin"}
+{"type":"partial","start":0.4,"end":1.6,"text":"so the"}
+{"type":"partial","start":0.4,"end":2.4,"text":"so the dead"}
+{"type":"partial","start":0.4,"end":3.2,"text":"so the deadline is"}
+{"type":"segment","id":0,"start":0.4,"end":3.9,"text":"So the deadline is Friday.","words":[{"text":"So","start":0.4,"end":0.58,"confidence":0.98},{"text":"the","start":0.64,"end":0.79,"confidence":0.99},{"text":"deadline","start":0.86,"end":1.52,"confidence":0.97},{"text":"is","start":1.59,"end":1.74,"confidence":0.99},{"text":"Friday.","start":1.81,"end":3.9,"confidence":0.96}]}
+{"type":"partial","start":4.2,"end":5.5,"text":"that gives us"}
+{"type":"partial","start":4.2,"end":6.8,"text":"that gives us two more"}
+{"type":"partial","start":4.2,"end":7.6,"text":"that gives us two more days"}
+{"type":"mute","muted":true}
+{"type":"partial","start":4.2,"end":8.4,"text":"that gives us two more days then"}
+{"type":"segment","id":1,"start":4.2,"end":8.95,"text":"That gives us two more days, then.","words":[{"text":"That","start":4.2,"end":4.46,"confidence":0.99},{"text":"gives","start":4.53,"end":4.88,"confidence":0.99},{"text":"us","start":4.94,"end":5.09,"confidence":0.99},{"text":"two","start":5.16,"end":5.41,"confidence":0.99},{"text":"more","start":5.48,"end":5.78,"confidence":0.99},{"text":"days,","start":5.85,"end":6.38,"confidence":0.97},{"text":"then.","start":6.56,"end":8.95,"confidence":0.94}]}
+{"type":"mute","muted":false}
+{"type":"partial","start":9.3,"end":10.9,"text":"I will send"}
+{"type":"partial","start":9.3,"end":12.1,"text":"I will send the migration"}
+{"type":"segment","id":2,"start":9.3,"end":13.4,"text":"I'll send the migration guide round tonight.","words":[{"text":"I'll","start":9.3,"end":9.55,"confidence":0.95},{"text":"send","start":9.62,"end":9.97,"confidence":0.99},{"text":"the","start":10.03,"end":10.17,"confidence":0.99},{"text":"migration","start":10.24,"end":10.95,"confidence":0.97},{"text":"guide","start":11.02,"end":11.43,"confidence":0.98},{"text":"round","start":11.5,"end":11.86,"confidence":0.97},{"text":"tonight.","start":11.93,"end":13.4,"confidence":0.96}]}
+{"type":"state","stage":"transcribing","status":"end"}
+{"type":"state","stage":"capturing","status":"end"}
+{"type":"final","language":"en","duration":14.2,"segments":3,"stopped_reason":"user","audio_path":"/tmp/ownscribe-mock/audio.wav"}

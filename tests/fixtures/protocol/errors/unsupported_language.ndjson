@@ -1,0 +1,3 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["asr","capture","diarize","embed","stream"],"models":{"asr":"parakeet-tdt-0.6b-v3"}}
+{"type":"state","stage":"transcribing","status":"begin"}
+{"type":"error","code":"unsupported_language","recoverable":false,"message":"Detected language 'ja' is not supported by Parakeet TDT v3.","detail":{"detected":"ja","supported":["bg","de","en","es","fr","it","nl","pl","pt","ru"]}}

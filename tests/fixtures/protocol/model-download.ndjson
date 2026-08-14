@@ -1,0 +1,16 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["asr","capture","diarize","embed","stream"],"models":{"asr":"parakeet-tdt-0.6b-v3","diarization":"pyannote-community-1"}}
+{"type":"state","stage":"preparing_models","status":"begin"}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","fraction":0.0,"bytes_done":0,"bytes_total":298844160}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","fraction":0.21,"bytes_done":62914560,"bytes_total":298844160}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","fraction":0.42,"bytes_done":125829120,"bytes_total":298844160}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","fraction":0.68,"bytes_done":203423744,"bytes_total":298844160}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","fraction":1.0,"bytes_done":298844160,"bytes_total":298844160}
+{"type":"progress","stage":"preparing_models","item":"pyannote-community-1","fraction":0.0,"bytes_done":0,"bytes_total":94371840}
+{"type":"progress","stage":"preparing_models","item":"pyannote-community-1","fraction":0.55,"bytes_done":51904512,"bytes_total":94371840}
+{"type":"progress","stage":"preparing_models","item":"pyannote-community-1","fraction":1.0,"bytes_done":94371840,"bytes_total":94371840}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","detail":"Compiling CoreML model"}
+{"type":"state","stage":"preparing_models","status":"end"}
+{"type":"state","stage":"transcribing","status":"begin"}
+{"type":"segment","id":0,"start":0.3,"end":2.85,"text":"Models are warm now.","words":[{"text":"Models","start":0.3,"end":0.79,"confidence":0.98},{"text":"are","start":0.85,"end":1.02,"confidence":0.99},{"text":"warm","start":1.09,"end":1.46,"confidence":0.98},{"text":"now.","start":1.53,"end":2.85,"confidence":0.96}]}
+{"type":"state","stage":"transcribing","status":"end"}
+{"type":"final","language":"en","duration":3.2,"segments":1}

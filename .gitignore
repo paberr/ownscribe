@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Agent worktrees
+.claude/worktrees/
+
 # IDE
 .idea/
 .vscode/

@@ -1,0 +1,6 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["capture"],"models":{}}
+{"type":"state","stage":"capturing","status":"begin"}
+{"type":"mute","muted":true}
+{"type":"mute","muted":false}
+{"type":"state","stage":"capturing","status":"end"}
+{"type":"final","language":"","duration":42.7,"segments":0,"stopped_reason":"user","audio_path":"/tmp/ownscribe-mock/audio.wav"}

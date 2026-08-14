@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/defs.json",
+  "title": "ownscribe-core protocol v1 — shared definitions",
+  "$defs": {
+    "timestamp": {
+      "description": "Seconds from the start of the audio.",
+      "type": "number",
+      "minimum": 0
+    },
+    "fraction": {
+      "description": "Normalised progress, 0.0 to 1.0 inclusive.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "stage": {
+      "description": "Stage vocabulary, aligned with PipelineProgress step keys.",
+      "type": "string",
+      "enum": ["capturing", "preparing_models", "transcribing", "diarizing"]
+    },
+    "substage": {
+      "description": "Diarization sub-steps, in the order PipelineProgress declares them.",
+      "type": "string",
+      "enum": ["segmentation", "speaker_counting", "embeddings", "clustering"]
+    },
+    "capability": {
+      "type": "string",
+      "enum": ["capture", "asr", "diarize", "embed", "stream"]
+    },
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "unsupported_architecture",
+        "unsupported_os",
+        "permission_denied",
+        "unsupported_language",
+        "model_download_failed",
+        "input_not_found",
+        "invalid_input",
+        "capture_failed",
+        "no_audio_captured",
+        "device_changed",
+        "internal_error"
+      ]
+    },
+    "speakerLabel": {
+      "description": "SPEAKER_NN by default; may be a resolved profile name once speaker profiles land.",
+      "type": "string",
+      "minLength": 1
+    },
+    "word": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "start": { "$ref": "#/$defs/timestamp" },
+        "end": { "$ref": "#/$defs/timestamp" },
+        "confidence": { "$ref": "#/$defs/fraction" },
+        "speaker": { "$ref": "#/$defs/speakerLabel" }
+      },
+      "required": ["text", "start", "end"],
+      "additionalProperties": false
+    },
+    "embedding": {
+      "type": "object",
+      "properties": {
+        "label": { "$ref": "#/$defs/speakerLabel" },
+        "vector": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1
+        },
+        "dim": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["label", "vector", "dim"],
+      "additionalProperties": false
+    }
+  }
+}

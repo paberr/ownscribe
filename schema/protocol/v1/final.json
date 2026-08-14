@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/final.json",
+  "title": "final",
+  "description": "Terminal success event. Exactly one per successful session, always last.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "final" },
+    "language": { "type": "string" },
+    "duration": { "$ref": "defs.json#/$defs/timestamp" },
+    "segments": { "type": "integer", "minimum": 0 },
+    "stopped_reason": {
+      "type": "string",
+      "enum": ["user", "silence_timeout", "eof"]
+    },
+    "audio_path": { "type": "string", "minLength": 1 }
+  },
+  "required": ["type", "language", "duration", "segments"],
+  "additionalProperties": false
+}

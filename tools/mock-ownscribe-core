@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""Mock ownscribe-core: replays a canned protocol session from an NDJSON fixture.
+
+Exists so P2 (Python backend), P5 (dependency purge) and P6 (menu bar app) can be built
+and fully tested before any Swift code exists. It accepts the same CLI surface as the real
+binary (docs/protocol.md §7), so it can be dropped in wherever the real binary is expected.
+
+Two replay modes:
+
+    --replay-speed 0     instant, no sleeping           (tests)
+    --replay-speed 1     real time, paced by audio      (UI development)
+    --replay-speed 10    10x faster than real time      (impatient UI development)
+
+Fixture selection, in order: --fixture, $OWNSCRIBE_MOCK_FIXTURE, then a default chosen
+from the flags so that no fixture needs naming for the common cases.
+
+Stdlib only, by design: this runs in environments where the project's dependencies are
+deliberately absent.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import signal
+import struct
+import sys
+import time
+import wave
+from pathlib import Path
+
+FIXTURE_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "protocol"
+
+# Seconds of session time attributed to an event that carries no audio timestamp
+# (state, progress, speakers, mute). Keeps download progress from replaying instantly.
+DEFAULT_TICK = 0.05
+
+USAGE = """\
+usage: mock-ownscribe-core <command> [options]
+
+commands:
+  capture       --output FILE [--mic] [--mic-device NAME] [--capture-mode-all]
+                [--silence-timeout SECONDS] [--transcribe] [--stream] [--diarize]
+                [--embed] [--language CODE] [--min-speakers N] [--max-speakers N]
+  transcribe    --input FILE [--diarize] [--embed] [--language CODE]
+                [--min-speakers N] [--max-speakers N]
+  list-devices
+  list-apps
+
+mock-only options:
+  --fixture PATH          NDJSON session to replay
+  --replay-speed FACTOR   0 = instant (default), 1 = real time, N = N x real time
+  --tick SECONDS          session time per untimed event (default 0.05)
+"""
+
+
+class UsageError(Exception):
+    """Bad command line. Exits 2 without emitting any protocol."""
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+#
+# Hand-rolled rather than argparse: the real binary parses its own flags in Swift
+# (AudioCapture.swift:936), and this needs to accept exactly that surface, including
+# rejecting anything it does not know rather than silently absorbing it.
+# ---------------------------------------------------------------------------
+
+_FLAGS_WITH_VALUE = {
+    "--output", "-o", "--mic-device", "--silence-timeout", "--input", "--language",
+    "--min-speakers", "--max-speakers", "--fixture", "--replay-speed", "--tick",
+}
+_BOOL_FLAGS = {
+    "--capture-mode-all", "--mic", "--transcribe", "--stream", "--diarize", "--embed",
+}
+_COMMANDS = {"capture", "transcribe", "list-devices", "list-apps"}
+
+
+def parse_args(argv: list[str]) -> dict:
+    if not argv:
+        raise UsageError("no command given")
+
+    command = argv[0]
+    if command in ("--help", "-h", "help"):
+        print(USAGE, end="")
+        raise SystemExit(0)
+    if command not in _COMMANDS:
+        raise UsageError(f"unknown command: {command}")
+
+    opts: dict = {"command": command, "replay_speed": 0.0, "tick": DEFAULT_TICK}
+    for flag in _BOOL_FLAGS:
+        opts[flag.lstrip("-").replace("-", "_")] = False
+
+    i = 1
+    while i < len(argv):
+        arg = argv[i]
+        if arg in _BOOL_FLAGS:
+            opts[arg.lstrip("-").replace("-", "_")] = True
+            i += 1
+            continue
+        if arg in _FLAGS_WITH_VALUE:
+            if i + 1 >= len(argv):
+                raise UsageError(f"{arg} requires a value")
+            value = argv[i + 1]
+            key = {"-o": "output"}.get(arg, arg.lstrip("-").replace("-", "_"))
+            opts[key] = value
+            i += 2
+            continue
+        raise UsageError(f"unknown option: {arg}")
+
+    if command == "capture" and not opts.get("output"):
+        raise UsageError("capture requires --output")
+    if command == "transcribe" and not opts.get("input"):
+        raise UsageError("transcribe requires --input")
+
+    for key in ("silence_timeout", "min_speakers", "max_speakers"):
+        if key in opts:
+            try:
+                opts[key] = int(opts[key])
+            except ValueError:
+                raise UsageError(f"--{key.replace('_', '-')} must be an integer") from None
+    for key in ("replay_speed", "tick"):
+        try:
+            opts[key] = float(opts[key])
+        except (TypeError, ValueError):
+            raise UsageError(f"--{key.replace('_', '-')} must be a number") from None
+    if opts["replay_speed"] < 0:
+        raise UsageError("--replay-speed must not be negative")
+    if opts["tick"] < 0:
+        raise UsageError("--tick must not be negative")
+
+    return opts
+
+
+def choose_fixture(opts: dict) -> Path:
+    """Pick a fixture: explicit flag, then env var, then inferred from the flags."""
+    if explicit := opts.get("fixture"):
+        return Path(explicit)
+    if env := os.environ.get("OWNSCRIBE_MOCK_FIXTURE"):
+        return Path(env)
+
+    if opts.get("stream"):
+        name = "streaming-partials"
+    elif opts.get("diarize"):
+        name = "diarized-meeting"
+    elif opts["command"] == "capture":
+        name = "capture-session"
+    else:
+        name = "short-meeting"
+    return FIXTURE_DIR / f"{name}.ndjson"
+
+
+# ---------------------------------------------------------------------------
+# Replay
+# ---------------------------------------------------------------------------
+
+
+def load_events(path: Path) -> list[dict]:
+    if not path.exists():
+        raise UsageError(f"fixture not found: {path}")
+    events = []
+    for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            raise UsageError(f"{path}:{lineno}: invalid JSON: {e}") from None
+    if not events:
+        raise UsageError(f"fixture is empty: {path}")
+    return events
+
+
+def event_time(event: dict, clock: float, tick: float) -> float:
+    """Session time at which this event should be emitted.
+
+    Timestamped events are paced by the audio timeline, so a real-time replay of a
+    diarized meeting looks like a diarized meeting. Everything else advances by a tick.
+    """
+    if event.get("type") in ("partial", "segment"):
+        return max(clock, float(event.get("end", clock)))
+    if event.get("type") == "final" and "duration" in event:
+        return max(clock, float(event["duration"]))
+    return clock + tick
+
+
+def emit(event: dict) -> None:
+    sys.stdout.write(json.dumps(event, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+class Replayer:
+    def __init__(self, events: list[dict], speed: float, tick: float) -> None:
+        self._events = events
+        self._speed = speed
+        self._tick = tick
+        self._stop_requested = False
+        self._muted = False
+
+    def request_stop(self, *_args) -> None:
+        """SIGINT: finish the current session early, as the real binary does on stop()."""
+        self._stop_requested = True
+
+    def toggle_mute(self, *_args) -> None:
+        """SIGUSR1: the real binary zeroes the mic buffers and reports the new state."""
+        self._muted = not self._muted
+        emit({"type": "mute", "muted": self._muted})
+
+    def run(self) -> int:
+        started = time.monotonic()
+        clock = 0.0
+        terminal: dict | None = None
+
+        for index, event in enumerate(self._events):
+            clock = event_time(event, clock, self._tick)
+
+            if self._speed > 0:
+                target = started + clock / self._speed
+                while (remaining := target - time.monotonic()) > 0:
+                    if self._stop_requested:
+                        break
+                    time.sleep(min(remaining, 0.05))
+
+            if self._stop_requested and not self._is_terminal(event):
+                terminal = self._truncate(self._events[index:], clock)
+                break
+
+            emit(event)
+            if self._is_terminal(event):
+                terminal = event
+
+        if terminal is None:
+            # Fixture ran out without a terminal event. Invariant 2 says that cannot
+            # happen, so synthesise one rather than exiting silently — a consumer that
+            # sees a truncated stream should see it as the failure it is.
+            terminal = {
+                "type": "error", "code": "internal_error", "recoverable": False,
+                "message": "Mock fixture ended without a terminal event.",
+            }
+            emit(terminal)
+
+        return 1 if terminal.get("type") == "error" else 0
+
+    @staticmethod
+    def _is_terminal(event: dict) -> bool:
+        if event.get("type") == "final":
+            return True
+        return event.get("type") == "error" and not event.get("recoverable", False)
+
+    def _truncate(self, remaining: list[dict], clock: float) -> dict:
+        """Close out a session interrupted by SIGINT.
+
+        Skips ahead to the fixture's own terminal event so the stream still satisfies
+        invariant 2, correcting the fields that a real early stop would change.
+        """
+        for event in remaining:
+            if self._is_terminal(event):
+                if event.get("type") == "final":
+                    event = dict(event)
+                    event["duration"] = round(clock, 3)
+                    event["stopped_reason"] = "user"
+                    event["segments"] = self._segments_emitted(remaining)
+                emit(event)
+                return event
+
+        final = {
+            "type": "final", "language": "en", "duration": round(clock, 3),
+            "segments": 0, "stopped_reason": "user",
+        }
+        emit(final)
+        return final
+
+    def _segments_emitted(self, remaining: list[dict]) -> int:
+        total = sum(1 for e in self._events if e.get("type") == "segment")
+        dropped = sum(1 for e in remaining if e.get("type") == "segment")
+        return total - dropped
+
+
+# ---------------------------------------------------------------------------
+# Side effects the real binary has
+# ---------------------------------------------------------------------------
+
+_WAV_SECONDS = 1.0
+_WAV_RATE = 16000  # D6: capture is 16 kHz mono
+
+
+def write_placeholder_wav(path: Path) -> None:
+    """Write a short, valid, non-silent WAV where the real binary would write a recording.
+
+    Non-silent on purpose: an all-zero file trips the silence checks in pipeline.py, which
+    is a real failure mode we do not want every mock-driven test to hit by accident.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames = int(_WAV_RATE * _WAV_SECONDS)
+    samples = (int(12000 * math.sin(2 * math.pi * 440 * n / _WAV_RATE)) for n in range(frames))
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(_WAV_RATE)
+        wav.writeframes(b"".join(struct.pack("<h", s) for s in samples))
+
+
+DEVICE_LISTING = """\
+Available input devices:
+  MacBook Pro Microphone
+  External Headphones
+"""
+
+APP_LISTING = """\
+Available audio sources:
+  Google Chrome
+  zoom.us
+"""
+
+
+def main(argv: list[str]) -> int:
+    try:
+        opts = parse_args(argv)
+    except UsageError as e:
+        sys.stderr.write(f"error: {e}\n\n{USAGE}")
+        return 2
+
+    if opts["command"] == "list-devices":
+        sys.stdout.write(DEVICE_LISTING)
+        return 0
+    if opts["command"] == "list-apps":
+        sys.stdout.write(APP_LISTING)
+        return 0
+
+    try:
+        events = load_events(choose_fixture(opts))
+    except UsageError as e:
+        sys.stderr.write(f"error: {e}\n")
+        return 2
+
+    replayer = Replayer(events, opts["replay_speed"], opts["tick"])
+    signal.signal(signal.SIGINT, replayer.request_stop)
+    signal.signal(signal.SIGUSR1, replayer.toggle_mute)
+
+    if output := opts.get("output"):
+        write_placeholder_wav(Path(output))
+
+    sys.stderr.write("mock-ownscribe-core: replaying fixture\n")
+    return replayer.run()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

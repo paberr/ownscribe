@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/state.json",
+  "title": "state",
+  "description": "A stage or sub-stage beginning or ending. Drives the PipelineProgress checklist.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "state" },
+    "stage": { "$ref": "defs.json#/$defs/stage" },
+    "substage": { "$ref": "defs.json#/$defs/substage" },
+    "status": { "type": "string", "enum": ["begin", "end"] }
+  },
+  "required": ["type", "stage", "status"],
+  "additionalProperties": false,
+  "if": { "required": ["substage"] },
+  "then": {
+    "description": "substage is only meaningful under diarizing.",
+    "properties": { "stage": { "const": "diarizing" } }
+  }
+}

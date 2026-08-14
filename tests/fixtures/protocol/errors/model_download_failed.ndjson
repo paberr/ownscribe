@@ -1,0 +1,4 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["asr","capture","diarize","embed","stream"],"models":{"asr":"parakeet-tdt-0.6b-v3"}}
+{"type":"state","stage":"preparing_models","status":"begin"}
+{"type":"progress","stage":"preparing_models","item":"parakeet-tdt-0.6b-v3","fraction":0.14,"bytes_done":44040192,"bytes_total":298844160}
+{"type":"error","code":"model_download_failed","recoverable":false,"message":"Could not download parakeet-tdt-0.6b-v3: connection reset after 42 MB.","detail":{"model":"parakeet-tdt-0.6b-v3","url":"https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3"}}

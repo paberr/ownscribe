@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/partial.json",
+  "title": "partial",
+  "description": "Provisional transcript text emitted during capture. May be revised or withdrawn; never final output.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "partial" },
+    "start": { "$ref": "defs.json#/$defs/timestamp" },
+    "end": { "$ref": "defs.json#/$defs/timestamp" },
+    "text": { "type": "string" }
+  },
+  "required": ["type", "start", "end", "text"],
+  "additionalProperties": false
+}

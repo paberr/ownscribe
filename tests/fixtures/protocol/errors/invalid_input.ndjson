@@ -1,0 +1,2 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["asr","capture","diarize","embed","stream"],"models":{"asr":"parakeet-tdt-0.6b-v3"}}
+{"type":"error","code":"invalid_input","recoverable":false,"message":"Input file is not decodable audio: /tmp/notes.txt","detail":{"path":"/tmp/notes.txt"}}

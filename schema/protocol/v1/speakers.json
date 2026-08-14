@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/speakers.json",
+  "title": "speakers",
+  "description": "Emitted once after diarization completes. Embeddings are present only when --embed is passed.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "speakers" },
+    "count": { "type": "integer", "minimum": 0 },
+    "labels": {
+      "type": "array",
+      "items": { "$ref": "defs.json#/$defs/speakerLabel" },
+      "uniqueItems": true
+    },
+    "embeddings": {
+      "type": "array",
+      "items": { "$ref": "defs.json#/$defs/embedding" }
+    }
+  },
+  "required": ["type", "count", "labels"],
+  "additionalProperties": false
+}

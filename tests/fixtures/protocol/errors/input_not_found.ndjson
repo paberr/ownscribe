@@ -1,0 +1,2 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["asr","capture","diarize","embed","stream"],"models":{"asr":"parakeet-tdt-0.6b-v3"}}
+{"type":"error","code":"input_not_found","recoverable":false,"message":"Input file not found: /tmp/missing.wav","detail":{"path":"/tmp/missing.wav"}}

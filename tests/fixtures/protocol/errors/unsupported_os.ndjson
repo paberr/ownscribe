@@ -1,0 +1,2 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["capture"],"models":{}}
+{"type":"error","code":"unsupported_os","recoverable":false,"message":"ownscribe requires macOS 14.2 or later. This machine reports 13.6.","detail":{"version":"13.6","required":"14.2"}}

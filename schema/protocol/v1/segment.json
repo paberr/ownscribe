@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/segment.json",
+  "title": "segment",
+  "description": "A final, non-revisable transcript segment. This is the output.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "segment" },
+    "id": { "type": "integer", "minimum": 0 },
+    "start": { "$ref": "defs.json#/$defs/timestamp" },
+    "end": { "$ref": "defs.json#/$defs/timestamp" },
+    "text": { "type": "string" },
+    "speaker": {
+      "oneOf": [
+        { "$ref": "defs.json#/$defs/speakerLabel" },
+        { "type": "null" }
+      ]
+    },
+    "words": {
+      "type": "array",
+      "items": { "$ref": "defs.json#/$defs/word" }
+    }
+  },
+  "required": ["type", "id", "start", "end", "text"],
+  "additionalProperties": false
+}

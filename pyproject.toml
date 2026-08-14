@@ -48,6 +48,7 @@ ownscribe = "ownscribe.cli:cli"
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.18",
     "ollama>=0.4",
     "openai>=1.0",
     "pytest>=8.0",

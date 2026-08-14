@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/progress.json",
+  "title": "progress",
+  "description": "Informational progress within a stage. Dropping every progress event still yields a correct transcript.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "progress" },
+    "stage": { "$ref": "defs.json#/$defs/stage" },
+    "substage": { "$ref": "defs.json#/$defs/substage" },
+    "item": { "type": "string", "minLength": 1 },
+    "fraction": { "$ref": "defs.json#/$defs/fraction" },
+    "bytes_done": { "type": "integer", "minimum": 0 },
+    "bytes_total": { "type": "integer", "minimum": 0 },
+    "detail": { "type": "string", "minLength": 1 }
+  },
+  "required": ["type", "stage"],
+  "additionalProperties": false,
+  "dependentRequired": {
+    "bytes_done": ["bytes_total"],
+    "bytes_total": ["bytes_done"]
+  }
+}

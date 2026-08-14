@@ -1,0 +1,2 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["capture"],"models":{}}
+{"type":"error","code":"unsupported_architecture","recoverable":false,"message":"ownscribe requires Apple Silicon. This machine reports x86_64.","detail":{"arch":"x86_64"}}

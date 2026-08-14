@@ -1,0 +1,3 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["capture"],"models":{}}
+{"type":"state","stage":"capturing","status":"begin"}
+{"type":"error","code":"capture_failed","recoverable":false,"message":"The audio tap stopped and could not be re-established.","detail":{"reason":"aggregate_device_lost"}}

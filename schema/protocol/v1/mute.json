@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/mute.json",
+  "title": "mute",
+  "description": "Mic mute state changed in response to SIGUSR1.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "mute" },
+    "muted": { "type": "boolean" }
+  },
+  "required": ["type", "muted"],
+  "additionalProperties": false
+}

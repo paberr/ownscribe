@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/event.json",
+  "title": "protocol event",
+  "description": "Entry point: validates one NDJSON line by dispatching on `type`. Ordering invariants are checked separately — JSON Schema cannot express them.",
+  "type": "object",
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "hello",
+        "state",
+        "progress",
+        "partial",
+        "segment",
+        "speakers",
+        "mute",
+        "final",
+        "error"
+      ]
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "type": { "const": "hello" } } }, "then": { "$ref": "hello.json" } },
+    { "if": { "properties": { "type": { "const": "state" } } }, "then": { "$ref": "state.json" } },
+    { "if": { "properties": { "type": { "const": "progress" } } }, "then": { "$ref": "progress.json" } },
+    { "if": { "properties": { "type": { "const": "partial" } } }, "then": { "$ref": "partial.json" } },
+    { "if": { "properties": { "type": { "const": "segment" } } }, "then": { "$ref": "segment.json" } },
+    { "if": { "properties": { "type": { "const": "speakers" } } }, "then": { "$ref": "speakers.json" } },
+    { "if": { "properties": { "type": { "const": "mute" } } }, "then": { "$ref": "mute.json" } },
+    { "if": { "properties": { "type": { "const": "final" } } }, "then": { "$ref": "final.json" } },
+    { "if": { "properties": { "type": { "const": "error" } } }, "then": { "$ref": "error.json" } }
+  ]
+}

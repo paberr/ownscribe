@@ -1,0 +1,2 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["capture"],"models":{}}
+{"type":"error","code":"permission_denied","recoverable":false,"message":"Screen Recording permission is not granted. Grant it in System Settings > Privacy & Security > Screen Recording, then run ownscribe again.","detail":{"permission":"screen_recording"}}

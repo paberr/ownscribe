@@ -1,0 +1,5 @@
+{"type":"hello","protocol":1,"binary_version":"0.15.0","capabilities":["capture"],"models":{}}
+{"type":"state","stage":"capturing","status":"begin"}
+{"type":"error","code":"no_audio_captured","recoverable":true,"message":"The recording contains no audible audio. Check that the intended source was playing and that Screen Recording permission is granted.","detail":{"peak_amplitude":0.0}}
+{"type":"state","stage":"capturing","status":"end"}
+{"type":"final","language":"","duration":120.4,"segments":0,"stopped_reason":"user","audio_path":"/tmp/ownscribe-mock/audio.wav"}

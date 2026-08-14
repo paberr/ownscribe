@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/hello.json",
+  "title": "hello",
+  "description": "Always the first line of a session, exactly once.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "hello" },
+    "protocol": { "type": "integer", "minimum": 1 },
+    "binary_version": { "type": "string", "minLength": 1 },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "defs.json#/$defs/capability" },
+      "uniqueItems": true
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "asr": { "type": "string", "minLength": 1 },
+        "diarization": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "required": ["type", "protocol", "binary_version", "capabilities", "models"],
+  "additionalProperties": false
+}

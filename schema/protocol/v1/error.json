@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paberr/ownscribe/schema/protocol/v1/error.json",
+  "title": "error",
+  "description": "recoverable=false is terminal and ends the stream. recoverable=true is a warning; the session continues.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "error" },
+    "code": { "$ref": "defs.json#/$defs/errorCode" },
+    "recoverable": { "type": "boolean" },
+    "message": { "type": "string", "minLength": 1 },
+    "detail": { "type": "object" }
+  },
+  "required": ["type", "code", "recoverable", "message"],
+  "additionalProperties": false
+}
