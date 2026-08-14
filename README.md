@@ -228,6 +228,7 @@ silence_timeout = 300     # seconds of silence before auto-stop; 0 = disabled
 [transcription]
 model = "base"            # tiny, base, small, medium, large-v3
 language = ""             # empty = auto-detect
+threads = 0               # CPU threads for transcription; 0 = auto-detect from core count
 # initial_prompt = ""     # prime Whisper with context: domain vocab, speaker names, expected phrases
 # hotwords = ""           # comma-separated words to boost recognition (softer hint than initial_prompt)
 

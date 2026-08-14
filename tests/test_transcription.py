@@ -19,6 +19,37 @@ class TestFfmpegCheck:
             transcriber.transcribe(mock.MagicMock())
 
 
+class TestThreads:
+    """WhisperX defaults to 4 CPU threads; ownscribe should use the whole machine."""
+
+    @staticmethod
+    def _load_model_kwargs(config) -> dict:
+        from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
+
+        fake_whisperx = mock.MagicMock()
+        transcriber = WhisperXTranscriber(config, None)
+        with mock.patch.dict("sys.modules", {"whisperx": fake_whisperx}):
+            transcriber._load_model()
+        return fake_whisperx.load_model.call_args.kwargs
+
+    def test_threads_from_config(self):
+        from ownscribe.config import TranscriptionConfig
+
+        assert self._load_model_kwargs(TranscriptionConfig(threads=12))["threads"] == 12
+
+    def test_threads_default_to_the_core_count(self):
+        from ownscribe.config import TranscriptionConfig
+
+        with mock.patch("os.cpu_count", return_value=10):
+            assert self._load_model_kwargs(TranscriptionConfig(threads=0))["threads"] == 10
+
+    def test_threads_fall_back_when_core_count_is_unknown(self):
+        from ownscribe.config import TranscriptionConfig
+
+        with mock.patch("os.cpu_count", return_value=None):
+            assert self._load_model_kwargs(TranscriptionConfig(threads=0))["threads"] == 4
+
+
 class _FakeProgress:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []

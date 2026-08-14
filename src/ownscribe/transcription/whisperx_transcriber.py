@@ -24,6 +24,9 @@ from ownscribe.transcription.models import Segment, TranscriptResult, Word
 
 _SAMPLE_RATE = 16000
 
+# Used only when the core count cannot be determined.
+_FALLBACK_THREADS = 4
+
 
 class WhisperXTranscriber(Transcriber):
     """Transcribes audio using WhisperX (faster-whisper + optional pyannote diarization)."""
@@ -41,6 +44,16 @@ class WhisperXTranscriber(Transcriber):
         self._align_models: dict[str, tuple[object, object]] = {}
         self._diarize_model = None
 
+    def _resolve_threads(self) -> int:
+        """CPU threads for transcription.
+
+        WhisperX defaults to 4 and passes it straight to CTranslate2 as
+        cpu_threads, which leaves most of the machine idle.
+        """
+        if self._tx_config.threads > 0:
+            return self._tx_config.threads
+        return max(1, os.cpu_count() or _FALLBACK_THREADS)
+
     def _load_model(self):
         import whisperx
 
@@ -57,6 +70,7 @@ class WhisperXTranscriber(Transcriber):
             compute_type=compute_type,
             language=self._tx_config.language or None,
             asr_options=asr_options or None,
+            threads=self._resolve_threads(),
         )
 
     def _configure_runtime_env(self) -> None:
