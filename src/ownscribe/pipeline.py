@@ -74,17 +74,20 @@ def _get_output_audio_dir(config: Config, out_dir: Path) -> Path:
 
 
 def _rename_output_dir(directory: Path, title_slug: str) -> Path:
-    """Append title slug to directory name. Returns the new path, or the
-    original if renaming isn't safely possible (e.g. the target already
-    exists with content, or the directory lives outside a renamable tree)."""
+    """Append title slug to directory name. Returns the new path, or the original
+    directory if the target already exists with content or the rename fails."""
+    logger = logging.getLogger(__name__)
     new_dir = directory.parent / f"{directory.name}_{title_slug}"
-    if new_dir.exists() and any(new_dir.iterdir()):
-        return directory
     try:
+        if new_dir.exists() and any(new_dir.iterdir()):
+            logger.debug("Not renaming output directory: %s already exists and is not empty", new_dir)
+            return directory
         directory.rename(new_dir)
         return new_dir
-    except OSError:
-        logging.getLogger(__name__).debug("Could not rename output directory", exc_info=True)
+    except OSError as e:
+        # Without exc_info: with no logging configured, a traceback lands on stderr
+        # and reads like a crash even though the run itself succeeded.
+        logger.warning("Could not rename output directory to %s: %s", new_dir.name, e)
         return directory
 
 

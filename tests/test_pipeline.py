@@ -208,7 +208,7 @@ class TestRenameOutputDir:
             result = _rename_output_dir(source, "budget-review")
 
         mock_rename.assert_not_called()
-        assert not caplog.records
+        assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
         assert result == source
         assert source.exists()
         assert (target / "unrelated.txt").read_text() == "already here"
@@ -244,8 +244,29 @@ class TestRenameOutputDir:
 
         assert result == source
         assert source.exists()
-        assert caplog.records
-        assert all(record.levelno <= logging.DEBUG for record in caplog.records)
+        warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "cross-device link" in warnings[0].getMessage()
+        # exc_info would print a traceback to stderr, which reads like a crash.
+        assert warnings[0].exc_info is None
+
+    def test_returns_original_when_target_is_a_file(self, tmp_path, caplog):
+        from ownscribe.pipeline import _rename_output_dir
+
+        source = tmp_path / "2026-01-01_1200"
+        source.mkdir()
+        (source / "transcript.md").write_text("hi")
+
+        target = tmp_path / "2026-01-01_1200_budget-review"
+        target.write_text("not a directory")
+
+        with caplog.at_level(logging.DEBUG):
+            result = _rename_output_dir(source, "budget-review")
+
+        assert result == source
+        assert (source / "transcript.md").read_text() == "hi"
+        assert target.read_text() == "not a directory"
+        assert [record for record in caplog.records if record.levelno == logging.WARNING]
 
 
 class TestDoTranscribeAndSummarize:
