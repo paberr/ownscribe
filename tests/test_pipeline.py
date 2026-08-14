@@ -557,6 +557,41 @@ class TestRunPipelineAudioLocation:
         assert called_out_dir.is_relative_to(tmp_path / "notes")
         assert called_out_dir.name == audio_path.parent.name
 
+    def test_no_audio_captured_hints_at_no_mic(self, tmp_path, capsys):
+        from ownscribe.pipeline import run_pipeline
+
+        config = Config()
+        config.output.dir = str(tmp_path / "notes")
+
+        recorder = self._make_recorder_mock()
+        recorder.start.side_effect = lambda path: path.write_bytes(b"")
+
+        with (
+            mock.patch("ownscribe.pipeline._create_recorder", return_value=recorder),
+            contextlib.suppress(SystemExit),
+        ):
+            run_pipeline(config)
+
+        assert "--no-mic" in capsys.readouterr().err
+
+    def test_no_audio_captured_without_mic_omits_hint(self, tmp_path, capsys):
+        from ownscribe.pipeline import run_pipeline
+
+        config = Config()
+        config.output.dir = str(tmp_path / "notes")
+        config.audio.mic = False
+
+        recorder = self._make_recorder_mock()
+        recorder.start.side_effect = lambda path: path.write_bytes(b"")
+
+        with (
+            mock.patch("ownscribe.pipeline._create_recorder", return_value=recorder),
+            contextlib.suppress(SystemExit),
+        ):
+            run_pipeline(config)
+
+        assert "--no-mic" not in capsys.readouterr().err
+
     def test_audio_recorded_into_dir_when_audio_dir_unset(self, tmp_path):
         from ownscribe.pipeline import run_pipeline
 

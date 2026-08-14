@@ -257,11 +257,15 @@ def run_pipeline(config: Config) -> None:
         click.echo("\n\nStopping recording...")
 
     if not audio_path.exists() or audio_path.stat().st_size <= _WAV_HEADER_SIZE:
-        click.echo(
+        message = (
             "Error: No audio was captured. Make sure audio is playing on your system, "
-            "or use --device to capture mic-only.",
-            err=True,
+            "or use --device to capture mic-only."
         )
+        # The mic is captured by default, and the helper stops the whole recording
+        # when it cannot open the microphone (no input device, permission denied).
+        if config.audio.mic:
+            message += "\nIf the microphone is unavailable, use --no-mic to record system audio only."
+        click.echo(message, err=True)
         raise SystemExit(1)
 
     click.echo(f"Audio saved to {audio_path}\n")
