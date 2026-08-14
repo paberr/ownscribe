@@ -769,6 +769,85 @@ class TestRunTranscribeColocation:
         assert (audio_dir / "transcript.md").exists()
 
 
+class TestRunSummarizeTranscriptText:
+    """run_summarize must normalise the saved transcript, not paste the file in."""
+
+    @staticmethod
+    def _summarize(config, tx_path):
+        from ownscribe.pipeline import run_summarize
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = ""
+
+        with (
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            run_summarize(config, str(tx_path))
+
+        return mock_summarizer.summarize.call_args[0][0]
+
+    def test_markdown_timestamps_are_stripped(self, tmp_path):
+        from ownscribe.output.markdown import format_transcript
+
+        tx_path = tmp_path / "transcript.md"
+        tx_path.write_text(
+            format_transcript(
+                TranscriptResult(
+                    segments=[
+                        Segment(text="Let's start.", start=0.0, end=1.0, speaker="SPEAKER_00"),
+                        Segment(text="Agreed.", start=1.0, end=2.0, speaker="SPEAKER_01"),
+                    ],
+                    language="en",
+                    duration=2.0,
+                )
+            )
+        )
+
+        summarized = self._summarize(Config(), tx_path)
+
+        assert summarized == "SPEAKER_00: Let's start.\nSPEAKER_01: Agreed."
+        assert "[00:00]" not in summarized
+        assert "# Transcript" not in summarized
+
+    def test_json_transcript_is_not_handed_to_the_llm_raw(self, tmp_path):
+        from ownscribe.output.json_output import format_transcript_json
+        from ownscribe.transcription.models import Word
+
+        tx_path = tmp_path / "transcript.json"
+        tx_path.write_text(
+            format_transcript_json(
+                TranscriptResult(
+                    segments=[
+                        Segment(
+                            text="Budget is approved.",
+                            start=0.0,
+                            end=2.0,
+                            speaker="SPEAKER_00",
+                            words=[Word(text="Budget", start=0.0, end=0.4, score=0.98)],
+                        )
+                    ],
+                    language="en",
+                    duration=2.0,
+                )
+            )
+        )
+
+        summarized = self._summarize(Config(), tx_path)
+
+        assert summarized == "SPEAKER_00: Budget is approved."
+        assert "score" not in summarized
+        assert "segments" not in summarized
+
+    def test_plain_text_file_is_passed_through(self, tmp_path):
+        tx_path = tmp_path / "notes.txt"
+        tx_path.write_text("Just some notes I typed myself.")
+
+        assert self._summarize(Config(), tx_path) == "Just some notes I typed myself."
+
+
 class TestRunSummarizeColocation:
     """Test that run_summarize saves output alongside the input file."""
 

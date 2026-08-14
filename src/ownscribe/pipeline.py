@@ -347,10 +347,35 @@ def run_warmup(config: Config) -> None:
         click.echo(f"Summarization model ready: {config.summarization.model}")
 
 
+def _load_transcript_text(transcript_path: Path) -> str:
+    """Read a saved transcript back as the text the summarizer expects.
+
+    transcript.md carries a [MM:SS] stamp on every segment and transcript.json
+    carries every word with timings and scores; neither belongs in an LLM
+    prompt. Parse the file back to a TranscriptResult so the summarizer sees the
+    same normalised, speaker-aware text as the inline path. Falls back to the
+    raw file contents for anything that is not a transcript ownscribe wrote.
+    """
+    raw = transcript_path.read_text()
+
+    if transcript_path.suffix.lower() == ".json":
+        from ownscribe.output.json_output import parse_transcript_json
+
+        result = parse_transcript_json(raw)
+    else:
+        from ownscribe.output.markdown import parse_transcript
+
+        result = parse_transcript(raw)
+
+    if result is None or not result.segments:
+        return raw
+    return result.speaker_text
+
+
 def run_summarize(config: Config, transcript_file: str) -> None:
     """Summarize a transcript file and save the summary alongside the input."""
     transcript_path = Path(transcript_file).resolve()
-    transcript_text = transcript_path.read_text()
+    transcript_text = _load_transcript_text(transcript_path)
 
     try:
         summarizer = create_summarizer(config)

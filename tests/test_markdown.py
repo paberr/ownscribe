@@ -1,6 +1,11 @@
 """Tests for markdown output formatter."""
 
-from ownscribe.output.markdown import _format_time, format_summary, format_transcript
+from ownscribe.output.markdown import (
+    _format_time,
+    format_summary,
+    format_transcript,
+    parse_transcript,
+)
 
 
 class TestFormatTime:
@@ -30,6 +35,42 @@ class TestFormatTranscript:
         assert "**SPEAKER_00**" in output
         assert "**SPEAKER_01**" in output
         assert "Hi, let's get started." in output
+
+
+class TestParseTranscript:
+    """format_transcript's inverse, so resume/summarize never feed the LLM markdown."""
+
+    def test_round_trip_without_speakers(self, sample_transcript):
+        parsed = parse_transcript(format_transcript(sample_transcript))
+
+        assert parsed is not None
+        assert [seg.text for seg in parsed.segments] == ["Hello world.", "How are you?"]
+        assert parsed.language == "en"
+
+    def test_round_trip_with_speakers(self, diarized_transcript):
+        parsed = parse_transcript(format_transcript(diarized_transcript))
+
+        assert parsed is not None
+        assert parsed.speaker_text == diarized_transcript.speaker_text
+
+    def test_drops_timestamps_and_heading(self, sample_transcript):
+        parsed = parse_transcript(format_transcript(sample_transcript))
+
+        assert parsed is not None
+        assert "[00:00]" not in parsed.speaker_text
+        assert "# Transcript" not in parsed.speaker_text
+        assert "**Duration:**" not in parsed.speaker_text
+
+    def test_parses_hour_long_timestamps(self):
+        parsed = parse_transcript("# Transcript\n\n[01:02:03] Still going.\n")
+
+        assert parsed is not None
+        assert parsed.segments[0].start == 3723
+        assert parsed.segments[0].text == "Still going."
+
+    def test_returns_none_for_plain_text(self):
+        assert parse_transcript("") is None
+        assert parse_transcript("# Transcript\n\n**Duration:** 00:10\n") is None
 
 
 class TestFormatSummary:
