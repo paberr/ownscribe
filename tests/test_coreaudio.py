@@ -20,6 +20,53 @@ def _capture_cmd(recorder, tmp_path: Path) -> list[str]:
     return mock_popen.call_args[0][0]
 
 
+class TestDownloadBinaryArchitecture:
+    """Releases only publish ownscribe-audio-arm64; anything else must say so."""
+
+    @staticmethod
+    def _download(platform_name: str, machine: str, capsys):
+        from ownscribe.audio import coreaudio
+
+        with (
+            mock.patch.object(coreaudio.sys, "platform", platform_name),
+            mock.patch.object(coreaudio.platform, "machine", return_value=machine),
+            mock.patch.object(coreaudio.urllib.request, "urlretrieve") as urlretrieve,
+        ):
+            result = coreaudio._download_binary()
+        return result, urlretrieve, capsys.readouterr()
+
+    def test_intel_mac_explains_instead_of_downloading(self, capsys):
+        result, urlretrieve, captured = self._download("darwin", "x86_64", capsys)
+
+        assert result is None
+        # A download would 404; the failure used to be swallowed silently.
+        urlretrieve.assert_not_called()
+        assert "Apple Silicon" in captured.err
+        assert "x86_64" in captured.err
+
+    def test_non_macos_stays_quiet(self, capsys):
+        result, urlretrieve, captured = self._download("linux", "x86_64", capsys)
+
+        assert result is None
+        urlretrieve.assert_not_called()
+        assert captured.err == ""
+
+    def test_apple_silicon_still_downloads(self, tmp_path):
+        from ownscribe.audio import coreaudio
+
+        with (
+            mock.patch.object(coreaudio.sys, "platform", "darwin"),
+            mock.patch.object(coreaudio.platform, "machine", return_value="arm64"),
+            mock.patch.object(coreaudio, "_CACHE_DIR", tmp_path),
+            mock.patch.object(coreaudio.urllib.request, "urlretrieve") as urlretrieve,
+            mock.patch.object(Path, "chmod"),
+        ):
+            result = coreaudio._download_binary()
+
+        assert result == tmp_path / "ownscribe-audio"
+        assert "ownscribe-audio-arm64" in urlretrieve.call_args[0][0]
+
+
 class TestCoreAudioRecorderCommand:
     def test_mic_and_device_passed_when_mic_enabled(self, tmp_path):
         cmd = _capture_cmd(_make_recorder(mic=True, mic_device="USB Mic"), tmp_path)

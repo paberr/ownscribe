@@ -55,7 +55,7 @@ All audio, transcripts, and summaries remain local.
 
 ## Requirements
 
-- macOS 14.2+ (for system audio capture)
+- macOS 14.2+ on Apple Silicon (for system audio capture)
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
 - [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
@@ -64,6 +64,11 @@ All audio, transcripts, and summaries remain local.
 Summarization works out of the box — a local model (Phi-4-mini, ~2.4 GB) downloads automatically on first run. Optionally, you can use [Ollama](https://ollama.ai), [LM Studio](https://lmstudio.ai), or any OpenAI-compatible server instead (see [Configuration](#configuration)).
 
 Works with any app that outputs audio through Core Audio (Zoom, Teams, Meet, etc.).
+
+> **Apple Silicon only.** The `ownscribe-audio` capture helper is published for `arm64` only. On an
+> Intel Mac, ownscribe says so and falls back to microphone-only recording; build the helper yourself
+> with `bash swift/build.sh` to capture system audio there. Transcription and summarization work on
+> any platform.
 
 > **Tip:** Your terminal app (Terminal, iTerm2, VS Code, etc.) needs **Screen Recording** permission to capture system audio.
 > Open the settings panel directly with:
