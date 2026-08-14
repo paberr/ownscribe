@@ -42,7 +42,7 @@ All audio, transcripts, and summaries remain local.
 ## Features
 
 - **System audio capture** — records all system audio natively via Core Audio Taps (macOS 14.2+), no virtual audio drivers needed
-- **Microphone capture** — optionally record system + mic audio simultaneously with `--mic`
+- **Microphone capture** — records system + mic audio simultaneously by default (press `m` to mute/unmute, or use `--no-mic`)
 - **WhisperX transcription** — fast, accurate speech-to-text with word-level timestamps
 - **Speaker diarization** — optional speaker identification via pyannote (requires HuggingFace token)
 - **Pipeline progress** — live checklist showing transcription, diarization sub-steps, and summarization progress
@@ -70,7 +70,14 @@ Works with any app that outputs audio through Core Audio (Zoom, Teams, Meet, etc
 > ```bash
 > open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 > ```
-> Enable your terminal app, then restart it.
+> Enable your terminal app, then restart it. Both capture modes need this permission, `picker` and `all` alike.
+>
+> The microphone is recorded by default, so macOS also asks for **Microphone** permission on the first run.
+> If you dismissed that prompt, enable your terminal app here:
+> ```bash
+> open "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+> ```
+> Recording fails to start while the microphone is unavailable — use `--no-mic` to capture system audio only.
 
 ## Installation
 
@@ -139,10 +146,10 @@ ownscribe                    # records system audio + mic, Ctrl+C to stop
 ```
 
 This will:
-1. Capture system audio and your microphone until you press Ctrl+C (or auto-stop after 5 minutes of silence)
+1. Capture system audio and your microphone until you press Ctrl+C (or auto-stop after 5 minutes of silence); press `m` to mute/unmute the mic while recording
 2. Transcribe with WhisperX
 3. Summarize with your local LLM
-4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMMSS/`
+4. Save everything to `~/ownscribe/YYYY-MM-DD_HHMM/`, renamed to `~/ownscribe/YYYY-MM-DD_HHMM_meeting-title/` once the summary produces a title
 
 > **Note:** By default, ownscribe records all system audio directly with no prompt. To show a macOS source picker on each launch instead, set `capture_mode = "picker"` in the `[audio]` config section.
 
@@ -151,8 +158,8 @@ On first run, WhisperX / pyannote and the summarization model may download model
 ### Options
 
 ```bash
-ownscribe --no-mic                            # capture system audio only (mic is on by default; press 'm' to mute/unmute)
-ownscribe --mic-device "MacBook Pro Microphone" # capture system audio + specific mic
+ownscribe --no-mic                            # capture system audio only (the mic is on by default)
+ownscribe --mic-device "MacBook Pro Microphone" # capture system audio + a specific mic instead of the default one
 ownscribe --device "MacBook Pro Microphone"   # use mic instead of system audio
 ownscribe --no-summarize                      # skip LLM summarization
 ownscribe --diarize                           # enable speaker identification
