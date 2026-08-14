@@ -104,8 +104,7 @@ class LlamaCppSummarizer(Summarizer):
         config: SummarizationConfig,
         templates: dict[str, TemplateConfig] | None = None,
     ) -> None:
-        self._config = config
-        self._templates = templates or {}
+        super().__init__(config, templates)
         self._llm: Llama | None = None
 
     def close(self) -> None:
@@ -138,11 +137,22 @@ class LlamaCppSummarizer(Summarizer):
         with _suppress_stderr():
             self._llm = Llama(
                 model_path=str(model_path),
-                n_ctx=8192,
+                n_ctx=self.context_size,
                 n_gpu_layers=-1,  # auto: offloads to Metal/CUDA when available, falls back to CPU
                 verbose=False,
             )
         return self._llm
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens with the model's own tokenizer, not a character estimate."""
+        if not text:
+            return 0
+        try:
+            llm = self._get_llm()
+            return len(llm.tokenize(text.encode("utf-8"), add_bos=False, special=False))
+        except Exception:
+            logger.debug("Falling back to estimated token count", exc_info=True)
+            return super().count_tokens(text)
 
     def chat(
         self,
@@ -187,17 +197,16 @@ class LlamaCppSummarizer(Summarizer):
         except ImportError:
             return False
 
-    def summarize(self, transcript_text: str) -> str:
-        from ownscribe.summarization.prompts import resolve_template
-
-        system, prompt = resolve_template(self._config.template, self._templates)
-        user = prompt.format(transcript=transcript_text)
+    def _complete(self, system_prompt: str, user_prompt: str) -> str:
         llm = self._get_llm()
         response = llm.create_chat_completion(
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
+            # Prompt and completion share n_ctx: cap the answer so the model
+            # cannot be cut off mid-sentence by its own prompt.
+            max_tokens=self.completion_reserve(),
         )
         return clean_response(response["choices"][0]["message"]["content"] or "")
 

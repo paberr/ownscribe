@@ -40,7 +40,8 @@ model = "phi-4-mini"      # local: "phi-4-mini", path to GGUF, or hf:owner/repo/
 # host = "http://localhost:11434"  # only for ollama/openai backends
 # api_key = ""            # only for openai backend; required by servers like oMLX (or set OPENAI_API_KEY)
 # template = "meeting"    # built-in: "meeting", "lecture", or "brief"
-# context_size = 0        # 0 = auto-detect from model; set manually for OpenAI-compatible backends
+# context_size = 0        # context window in tokens; 0 = auto-detect (8192 for local). Longer
+                          # transcripts are summarized in chunks and merged, whatever the size.
 
 # Custom templates (optional):
 # [templates.my-notes]

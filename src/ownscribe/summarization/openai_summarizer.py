@@ -13,8 +13,7 @@ class OpenAISummarizer(Summarizer):
     """Summarizes transcripts using an OpenAI-compatible API."""
 
     def __init__(self, config: SummarizationConfig, templates: dict | None = None) -> None:
-        self._config = config
-        self._templates = templates or {}
+        super().__init__(config, templates)
         base_url = config.host
         if not base_url.endswith("/v1"):
             base_url = base_url.rstrip("/") + "/v1"
@@ -63,17 +62,12 @@ class OpenAISummarizer(Summarizer):
         except Exception:
             return False
 
-    def summarize(self, transcript_text: str) -> str:
-        from ownscribe.summarization.prompts import resolve_template
-
-        system, prompt = resolve_template(self._config.template, self._templates)
-        user = prompt.format(transcript=transcript_text)
-
+    def _complete(self, system_prompt: str, user_prompt: str) -> str:
         response = self._client.chat.completions.create(
             model=self._config.model,
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
         )
         return clean_response(response.choices[0].message.content or "")

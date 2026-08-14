@@ -5,7 +5,7 @@ from __future__ import annotations
 import ollama
 
 from ownscribe.config import SummarizationConfig
-from ownscribe.summarization.base import Summarizer
+from ownscribe.summarization.base import DEFAULT_CONTEXT_SIZE, Summarizer
 from ownscribe.summarization.prompts import clean_response
 
 
@@ -13,9 +13,29 @@ class OllamaSummarizer(Summarizer):
     """Summarizes transcripts using a local Ollama model."""
 
     def __init__(self, config: SummarizationConfig, templates: dict | None = None) -> None:
-        self._config = config
-        self._templates = templates or {}
+        super().__init__(config, templates)
         self._client = ollama.Client(host=config.host)
+        self._probed_context_size: int | None = None
+
+    @property
+    def context_size(self) -> int:
+        if self._config.context_size > 0:
+            return self._config.context_size
+        if self._probed_context_size is None:
+            self._probed_context_size = self._probe_context_size()
+        return self._probed_context_size or DEFAULT_CONTEXT_SIZE
+
+    def _probe_context_size(self) -> int:
+        """Ask the server for the model's context window. Returns 0 if unknown."""
+        try:
+            info = self._client.show(self._config.model)
+            model_info = info.get("model_info", {})
+            for key, value in model_info.items():
+                if "context_length" in key:
+                    return int(value)
+        except Exception:
+            pass
+        return 0
 
     def chat(
         self, system_prompt: str, user_prompt: str,
@@ -41,17 +61,12 @@ class OllamaSummarizer(Summarizer):
         except Exception:
             return False
 
-    def summarize(self, transcript_text: str) -> str:
-        from ownscribe.summarization.prompts import resolve_template
-
-        system, prompt = resolve_template(self._config.template, self._templates)
-        user = prompt.format(transcript=transcript_text)
-
+    def _complete(self, system_prompt: str, user_prompt: str) -> str:
         response = self._client.chat(
             model=self._config.model,
             messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
         )
         return clean_response(response["message"]["content"])

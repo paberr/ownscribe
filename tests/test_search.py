@@ -10,7 +10,6 @@ from ownscribe.search import (
     _answer_from_transcripts,
     _build_summary_chunks,
     _discover_meetings,
-    _estimate_tokens,
     _extract_keywords,
     _extract_quotes,
     _find_relevant_meetings,
@@ -20,6 +19,7 @@ from ownscribe.search import (
     _rank_meetings,
     _verify_quotes,
 )
+from ownscribe.summarization.base import DEFAULT_CONTEXT_SIZE, estimate_tokens
 
 # -- Helpers --
 
@@ -35,10 +35,14 @@ def _make_meeting_dir(base: Path, folder_name: str, summary: str, transcript: st
 class FakeSummarizer:
     """A fake summarizer that returns canned responses."""
 
-    def __init__(self, responses: list[str] | None = None):
+    def __init__(self, responses: list[str] | None = None, context_size: int = DEFAULT_CONTEXT_SIZE):
         self.calls: list[tuple[str, str, bool]] = []
+        self.context_size = context_size
         self._responses = list(responses or [])
         self._call_idx = 0
+
+    def count_tokens(self, text: str) -> int:
+        return estimate_tokens(text)
 
     def chat(
         self, system_prompt: str, user_prompt: str,
@@ -129,9 +133,29 @@ class TestDiscoverMeetings:
 
 class TestEstimateTokens:
     def test_estimate_tokens(self):
-        assert _estimate_tokens("a" * 100) == 25
-        assert _estimate_tokens("") == 0
-        assert _estimate_tokens("hello world") == 2
+        assert estimate_tokens("a" * 100) == 25
+        assert estimate_tokens("") == 0
+        assert estimate_tokens("hello world") == 2
+
+    def test_search_counts_tokens_via_the_summarizer(self, tmp_path):
+        # Token counting is centralised on the summarizer so a backend with a
+        # real tokenizer is used instead of the character estimate.
+        _make_meeting_dir(tmp_path, "2026-02-13_1501_planning", "Summary text")
+
+        class CountingSummarizer(FakeSummarizer):
+            def __init__(self):
+                super().__init__()
+                self.counted: list[str] = []
+
+            def count_tokens(self, text: str) -> int:
+                self.counted.append(text)
+                return estimate_tokens(text)
+
+        meetings, _ = _discover_meetings(tmp_path, since=None, limit=None)
+        summarizer = CountingSummarizer()
+        _build_summary_chunks(summarizer, meetings, context_budget=100000)
+
+        assert any("Summary text" in text for text in summarizer.counted)
 
 
 # -- Chunking --
@@ -149,7 +173,7 @@ class TestBuildSummaryChunks:
 
         meetings, _ = _discover_meetings(tmp_path, since=None, limit=None)
         # Small budget that forces multiple chunks
-        chunks = _build_summary_chunks(meetings, context_budget=2000)
+        chunks = _build_summary_chunks(FakeSummarizer(), meetings, context_budget=2000)
         assert len(chunks) > 1
         # All meetings accounted for
         all_ids = {m.folder_name for chunk in chunks for m in chunk}
@@ -165,7 +189,7 @@ class TestBuildSummaryChunks:
 
         meetings, _ = _discover_meetings(tmp_path, since=None, limit=None)
         # Large budget - everything fits in one chunk
-        chunks = _build_summary_chunks(meetings, context_budget=100000)
+        chunks = _build_summary_chunks(FakeSummarizer(), meetings, context_budget=100000)
         assert len(chunks) == 1
         assert len(chunks[0]) == 3
 

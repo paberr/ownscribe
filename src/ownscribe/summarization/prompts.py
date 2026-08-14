@@ -72,6 +72,45 @@ Transcript:
 {transcript}"""
 
 
+# --- Map-reduce over a transcript too long for one context window ---
+#
+# The reduce step runs under whatever template produced the partial notes, so it
+# must not assume any particular sections: a user template can define arbitrary
+# ones. It asks the model to mirror the structure it is given instead.
+
+REDUCE_SUMMARY_SYSTEM = (
+    "You are given several partial sets of notes, each covering a consecutive part of "
+    "the same long transcript. You consolidate them into one final set of notes that "
+    "keeps the exact structure the partial notes already use."
+)
+
+REDUCE_SUMMARY_PROMPT = """The notes below were produced from consecutive parts of a single long transcript. \
+Every part was summarized with the same instructions, so the parts already share their structure.
+
+Merge them into one set of notes covering the whole transcript:
+- Keep exactly the sections and headings that appear in the partial notes, in the same order. \
+Do not add, rename, drop, or reorder sections.
+- If the partial notes use no headings, return the merged notes in that same shape.
+- Consecutive parts overlap, so fold duplicates and near-duplicates into a single entry.
+- Keep every distinct fact, decision, task, and owner. Do not invent anything the partial notes do not state.
+- Write the result as the final notes for the whole transcript, never as commentary about the parts.
+
+{partials}
+
+Return only the merged notes."""
+
+PARTIAL_HEADER = "--- Notes from part {index} of {total} ---"
+
+
+def format_partials(partials: list[str]) -> str:
+    """Render per-chunk summaries as a labelled block for the reduce prompt."""
+    total = len(partials)
+    return "\n\n".join(
+        f"{PARTIAL_HEADER.format(index=i, total=total)}\n{partial.strip()}"
+        for i, partial in enumerate(partials, 1)
+    )
+
+
 TEMPLATES: dict[str, dict[str, str]] = {
     "meeting": {"system": MEETING_SUMMARY_SYSTEM, "prompt": MEETING_SUMMARY_PROMPT},
     "lecture": {"system": LECTURE_SUMMARY_SYSTEM, "prompt": LECTURE_SUMMARY_PROMPT},
