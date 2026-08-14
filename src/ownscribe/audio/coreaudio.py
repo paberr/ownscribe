@@ -102,10 +102,12 @@ class CoreAudioRecorder(AudioRecorder):
         cmd = [str(self._binary), "capture", "--output", str(output_path)]
         if self._capture_mode == "all":
             cmd.append("--capture-mode-all")
-        if self._mic or self._mic_device:
+        # A configured mic_device must not re-enable a mic that was turned off,
+        # e.g. via --no-mic or mic = false in config.toml.
+        if self._mic:
             cmd.append("--mic")
-        if self._mic_device:
-            cmd.extend(["--mic-device", self._mic_device])
+            if self._mic_device:
+                cmd.extend(["--mic-device", self._mic_device])
         if self._silence_timeout > 0:
             cmd.extend(["--silence-timeout", str(self._silence_timeout)])
 

@@ -38,6 +38,35 @@ class TestMainCommand:
             config = mock_run.call_args[0][0]
             assert config.audio.mic is False
 
+    def test_mic_flag_overrides_config(self):
+        runner = CliRunner()
+        config = Config()
+        config.audio.mic = False
+        with _mock_config(config), mock.patch("ownscribe.pipeline.run_pipeline") as mock_run:
+            result = runner.invoke(cli, ["--mic"])
+            assert result.exit_code == 0
+            assert mock_run.call_args[0][0].audio.mic is True
+
+    def test_mic_device_implies_mic(self):
+        runner = CliRunner()
+        config = Config()
+        config.audio.mic = False
+        with _mock_config(config), mock.patch("ownscribe.pipeline.run_pipeline") as mock_run:
+            result = runner.invoke(cli, ["--mic-device", "USB Mic"])
+            assert result.exit_code == 0
+            config = mock_run.call_args[0][0]
+            assert config.audio.mic is True
+            assert config.audio.mic_device == "USB Mic"
+
+    def test_no_mic_wins_over_configured_mic_device(self):
+        runner = CliRunner()
+        config = Config()
+        config.audio.mic_device = "USB Mic"
+        with _mock_config(config), mock.patch("ownscribe.pipeline.run_pipeline") as mock_run:
+            result = runner.invoke(cli, ["--no-mic"])
+            assert result.exit_code == 0
+            assert mock_run.call_args[0][0].audio.mic is False
+
     def test_no_mic_with_mic_device_errors(self):
         runner = CliRunner()
         with _mock_config():
