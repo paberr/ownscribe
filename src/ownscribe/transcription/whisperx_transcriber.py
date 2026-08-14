@@ -36,13 +36,31 @@ class WhisperXTranscriber(Transcriber):
         transcription_config: TranscriptionConfig,
         diarization_config: DiarizationConfig | None = None,
         progress: NullProgress | None = None,
+        need_word_timestamps: bool = False,
     ) -> None:
         self._tx_config = transcription_config
         self._diar_config = diarization_config
         self._progress = progress or NullProgress()
+        self._need_word_timestamps = need_word_timestamps
         self._model = None
         self._align_models: dict[str, tuple[object, object]] = {}
         self._diarize_model = None
+
+    def _will_diarize(self) -> bool:
+        return bool(
+            self._diar_config
+            and self._diar_config.enabled
+            and self._diar_config.hf_token
+        )
+
+    def _should_align(self) -> bool:
+        """Whether the wav2vec2 alignment pass is worth its runtime.
+
+        Alignment is a full second pass over the audio and only produces
+        word-level timings. Nothing reads those unless the caller asked for JSON
+        output or diarization needs them to assign speakers to words.
+        """
+        return self._need_word_timestamps or self._will_diarize()
 
     def _resolve_threads(self) -> int:
         """CPU threads for transcription.
@@ -118,6 +136,7 @@ class WhisperXTranscriber(Transcriber):
         language: str | None,
         step_key: str,
         show_deferred_align_note: bool = False,
+        load_align: bool = True,
     ) -> None:
         if self._model is None:
             self._capture_download_output(
@@ -125,6 +144,9 @@ class WhisperXTranscriber(Transcriber):
                 f"Loading Whisper model ({self._tx_config.model})",
                 self._load_model,
             )
+
+        if not load_align:
+            return
 
         if language:
             self._load_align_model(language, step_key=step_key)
@@ -181,11 +203,7 @@ class WhisperXTranscriber(Transcriber):
                 show_deferred_align_note=True,
             )
 
-            if (
-                self._diar_config
-                and self._diar_config.enabled
-                and self._diar_config.hf_token
-            ):
+            if self._will_diarize():
                 self._load_diarization_pipeline()
 
             progress.complete("preparing_models")
@@ -242,18 +260,24 @@ class WhisperXTranscriber(Transcriber):
             with contextlib.redirect_stdout(devnull):
                 progress.begin("transcribing")
 
+                align_enabled = self._should_align()
+
                 self._prepare_transcription_models(
                     language=self._tx_config.language or None,
                     step_key="transcribing",
                     show_deferred_align_note=False,
+                    load_align=align_enabled,
                 )
                 self._set_detail("transcribing", None)
 
                 audio = whisperx.load_audio(str(audio_path))
 
+                # Transcription owns the whole progress bar when alignment is
+                # skipped, so it still reaches 100%.
+                tx_scale = 0.5 if align_enabled else 1.0
                 tx_writer = ProgressWriter(
                     lambda frac: progress.update("transcribing", frac),
-                    offset=0.0, scale=0.5,
+                    offset=0.0, scale=tx_scale,
                 )
                 align_writer = ProgressWriter(
                     lambda frac: progress.update("transcribing", frac),
@@ -268,27 +292,24 @@ class WhisperXTranscriber(Transcriber):
 
                 language = result.get("language", "")
 
-                align_model, align_metadata = self._load_align_model(language, step_key="transcribing")
-                with contextlib.redirect_stdout(align_writer):
-                    result = whisperx.align(
-                        result["segments"],
-                        align_model,
-                        align_metadata,
-                        audio,
-                        device="cpu",
-                        return_char_alignments=False,
-                        print_progress=True,
-                        combined_progress=True,
-                    )
+                if align_enabled:
+                    align_model, align_metadata = self._load_align_model(language, step_key="transcribing")
+                    with contextlib.redirect_stdout(align_writer):
+                        result = whisperx.align(
+                            result["segments"],
+                            align_model,
+                            align_metadata,
+                            audio,
+                            device="cpu",
+                            return_char_alignments=False,
+                            print_progress=True,
+                            combined_progress=True,
+                        )
 
                 progress.complete("transcribing")
 
                 # --- Optional diarization ---
-                if (
-                    self._diar_config
-                    and self._diar_config.enabled
-                    and self._diar_config.hf_token
-                ):
+                if self._will_diarize():
                     result = self._diarize(audio, result)
         finally:
             devnull.close()

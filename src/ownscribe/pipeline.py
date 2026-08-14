@@ -120,7 +120,14 @@ def _create_transcriber(config: Config, progress=None):
     from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
 
     diar_config = config.diarization if config.diarization.enabled else None
-    return WhisperXTranscriber(config.transcription, diar_config, progress=progress)
+    return WhisperXTranscriber(
+        config.transcription,
+        diar_config,
+        progress=progress,
+        # Only the JSON output carries word-level timings; markdown reads
+        # nothing but segment start, text and speaker.
+        need_word_timestamps=config.output.format == "json",
+    )
 
 
 def _download_summarization_model(

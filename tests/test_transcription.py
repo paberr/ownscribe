@@ -215,10 +215,102 @@ class TestDownloadProgressHooks:
             language="en",
             step_key="transcribing",
             show_deferred_align_note=False,
+            # Markdown output without diarization needs no word timings, so the
+            # alignment model is not loaded either.
+            load_align=False,
         )
         assert ("begin", "transcribing") in progress.calls
         assert ("begin", "preparing_models") not in progress.calls
         assert result.language == "en"
+
+
+class TestAlignmentIsSkippedWhenUnused:
+    """whisperx.align is a full second pass; only JSON and diarization read it."""
+
+    @staticmethod
+    def _run(need_word_timestamps: bool, diar=None):
+        from ownscribe.config import TranscriptionConfig
+        from ownscribe.transcription.whisperx_transcriber import WhisperXTranscriber
+
+        class _Audio:
+            shape = (16000,)
+
+        def _align(*_args, **_kwargs):
+            print("Progress: 100.00%")  # what whisperx emits, driving the bar
+            return {"segments": []}
+
+        align = mock.MagicMock(side_effect=_align)
+        fake_whisperx = types.SimpleNamespace(
+            load_audio=lambda _path: _Audio(),
+            align=align,
+            assign_word_speakers=lambda df, res: res,
+        )
+
+        progress = _FakeProgress()
+        transcriber = WhisperXTranscriber(
+            TranscriptionConfig(language="en"),
+            diar,
+            progress=progress,
+            need_word_timestamps=need_word_timestamps,
+        )
+
+        def _transcribe(*_args, **_kwargs):
+            print("Progress: 100.00%")
+            return {"segments": [], "language": "en"}
+
+        transcriber._model = mock.MagicMock()
+        transcriber._model.transcribe.side_effect = _transcribe
+
+        with (
+            mock.patch.dict("sys.modules", {"whisperx": fake_whisperx}),
+            mock.patch.object(transcriber, "_prepare_transcription_models"),
+            mock.patch.object(transcriber, "_load_align_model", return_value=(object(), object())),
+            mock.patch.object(transcriber, "_diarize", side_effect=lambda _audio, res: res),
+        ):
+            transcriber._transcribe_inner(mock.MagicMock())
+
+        return align, progress
+
+    def test_skipped_for_markdown_without_diarization(self):
+        align, _progress = self._run(need_word_timestamps=False)
+
+        align.assert_not_called()
+
+    def test_runs_for_json_output(self):
+        align, _progress = self._run(need_word_timestamps=True)
+
+        align.assert_called_once()
+
+    def test_runs_when_diarizing(self):
+        from ownscribe.config import DiarizationConfig
+
+        diar = DiarizationConfig(enabled=True, hf_token="hf_test_token")
+        align, _progress = self._run(need_word_timestamps=False, diar=diar)
+
+        align.assert_called_once()
+
+    def test_skipped_when_diarization_has_no_token(self):
+        from ownscribe.config import DiarizationConfig
+
+        diar = DiarizationConfig(enabled=True, hf_token="")
+        align, _progress = self._run(need_word_timestamps=False, diar=diar)
+
+        align.assert_not_called()
+
+    def test_progress_bar_still_reaches_full_when_skipped(self):
+        _align, progress = self._run(need_word_timestamps=False)
+
+        # Transcription owns the whole bar, so it does not stall at 50%.
+        transcribing = [frac for key, frac in progress.updates if key == "transcribing"]
+        assert transcribing
+        assert max(transcribing) == 1.0
+
+    def test_progress_bar_is_shared_when_alignment_runs(self):
+        _align, progress = self._run(need_word_timestamps=True)
+
+        transcribing = [frac for key, frac in progress.updates if key == "transcribing"]
+        # Transcription fills the first half, alignment the second.
+        assert max(frac for frac in transcribing if frac <= 0.5) == 0.5
 
 
 class TestDiarizationApiCompat:
