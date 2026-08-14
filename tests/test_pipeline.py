@@ -279,6 +279,39 @@ class TestDoTranscribeAndSummarize:
             duration=1.5,
         )
 
+    def test_summarizer_receives_speaker_labels(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "markdown"
+        config.summarization.enabled = True
+        audio_path = tmp_path / "recording.wav"
+        audio_path.touch()
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = TranscriptResult(
+            segments=[
+                Segment(text="Let's start.", start=0.0, end=1.0, speaker="SPEAKER_00"),
+                Segment(text="I'll take the deploy.", start=1.0, end=2.5, speaker="SPEAKER_01"),
+            ],
+            language="en",
+            duration=2.5,
+        )
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
+
+        summarized = mock_summarizer.summarize.call_args[0][0]
+        assert summarized == "SPEAKER_00: Let's start.\nSPEAKER_01: I'll take the deploy."
+
     def test_transcribe_only(self, tmp_path):
         from ownscribe.pipeline import _do_transcribe_and_summarize
 

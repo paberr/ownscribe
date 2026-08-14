@@ -493,7 +493,7 @@ def _do_transcribe_and_summarize(
                                 "downloading_model",
                             )
                             progress.complete("downloading_model")
-                        summary = summarizer.summarize(result.full_text)
+                        summary = summarizer.summarize(result.speaker_text)
                         _, summary_str = _format_output(config, result, summary)
                         summary_path = out_dir / f"summary.{ext}"
                         summary_path.write_text(summary_str or summary)
