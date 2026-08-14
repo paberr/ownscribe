@@ -121,6 +121,48 @@ class TestFormatOutput:
         parsed = json.loads(transcript_str)
         assert "segments" in parsed
 
+    def test_json_summary_is_json(self, sample_transcript):
+        from ownscribe.pipeline import _format_output
+
+        config = Config()
+        config.output.format = "json"
+
+        _transcript_str, summary_str = _format_output(config, sample_transcript, "## Summary\nA great meeting.")
+
+        # The summary used to be written to summary.json as raw markdown.
+        assert json.loads(summary_str)["summary"] == "## Summary\nA great meeting."
+
+    def test_json_summary_written_to_disk_parses(self, tmp_path):
+        from ownscribe.pipeline import _do_transcribe_and_summarize
+
+        config = Config()
+        config.output.format = "json"
+        config.summarization.enabled = True
+        audio_path = tmp_path / "recording.wav"
+        audio_path.touch()
+
+        mock_transcriber = mock.MagicMock()
+        mock_transcriber.transcribe.return_value = TranscriptResult(
+            segments=[Segment(text="Hello world.", start=0.0, end=1.5)],
+            language="en",
+            duration=1.5,
+        )
+
+        mock_summarizer = mock.MagicMock()
+        mock_summarizer.is_available.return_value = True
+        mock_summarizer.summarize.return_value = "## Summary\nGood meeting."
+        mock_summarizer.generate_title.return_value = ""
+
+        with (
+            mock.patch("ownscribe.pipeline._create_transcriber", return_value=mock_transcriber),
+            mock.patch("ownscribe.pipeline.create_summarizer", return_value=mock_summarizer),
+            mock.patch("ownscribe.summarization.llama_cpp_summarizer._ensure_model"),
+        ):
+            _do_transcribe_and_summarize(config, audio_path, tmp_path, summarize=True)
+
+        written = json.loads((tmp_path / "summary.json").read_text())
+        assert written["summary"] == "## Summary\nGood meeting."
+
 
 class TestSlugify:
     def test_basic(self):

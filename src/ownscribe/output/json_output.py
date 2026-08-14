@@ -13,6 +13,11 @@ def format_transcript_json(result: TranscriptResult) -> str:
     return json.dumps(asdict(result), indent=2, ensure_ascii=False)
 
 
+def format_summary_json(summary_text: str) -> str:
+    """Format a summary as JSON, so summary.json really holds JSON."""
+    return json.dumps({"summary": summary_text.strip()}, indent=2, ensure_ascii=False)
+
+
 def parse_transcript_json(text: str) -> TranscriptResult | None:
     """Read back a transcript written by format_transcript_json.
 

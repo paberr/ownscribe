@@ -145,9 +145,11 @@ def _download_summarization_model(
 def _format_output(config: Config, transcript_result, summary_text: str | None = None) -> tuple[str, str | None]:
     """Format transcript and optional summary. Returns (transcript_str, summary_str)."""
     if config.output.format == "json":
-        from ownscribe.output.json_output import format_transcript_json
+        from ownscribe.output.json_output import format_summary_json, format_transcript_json
 
-        return format_transcript_json(transcript_result), summary_text
+        tx = format_transcript_json(transcript_result)
+        sm = format_summary_json(summary_text) if summary_text else None
+        return tx, sm
     else:
         from ownscribe.output.markdown import format_summary, format_transcript
 
@@ -557,7 +559,9 @@ def _do_transcribe_and_summarize(
 
     if summary is not None:
         click.echo(f"Summary saved to {out_dir / f'summary.{ext}'}")
-        click.echo(f"\n{summary_str or summary}")
+        # summary.json holds machine-readable JSON; the console still shows the text.
+        displayed = summary if config.output.format == "json" else (summary_str or summary)
+        click.echo(f"\n{displayed}")
         if title_slug:
             out_dir, old_out_dir = _rename_output_dir(out_dir, title_slug), out_dir
             audio_dir = audio_path.parent
