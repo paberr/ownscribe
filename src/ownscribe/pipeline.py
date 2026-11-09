@@ -7,11 +7,15 @@ import re
 import select
 import signal
 import sys
-import termios
 import time
-import tty
 from datetime import datetime
 from pathlib import Path
+
+try:  # mic-mute hotkey is macOS-only; absent on Windows
+    import termios
+    import tty
+except ImportError:
+    termios = tty = None
 
 import click
 

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>meetingnotes</title>
+<style>
+:root{--bg:#202938;--panel:#384252;--inset:#202938;--line:#4d586a;--text:#f3f4f6;--muted:#9ca3af;--blue:#2563eb;--blue-hi:#3b82f6;--act:#f0abfc;--info:#7dd3fc}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:min(96vw,96rem);margin:0 auto;padding:2rem 16px 4rem;display:grid;gap:1rem}
+#f{width:100%;max-width:44rem;margin-inline:auto}  /* upload panel stays narrow; the analysis below uses the full width */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.6rem}
+h1,h2{margin:0;font-size:1rem;font-weight:600}
+.sub{margin:.25rem 0 0;color:var(--muted);font-size:.9rem}
+/* drop zone */
+#drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;margin-top:1rem;min-height:11rem;
+ background:var(--inset);border:1px dashed var(--line);border-radius:8px;cursor:pointer;text-align:center;transition:border-color .15s,background .15s}
+#drop:hover,#drop.over{border-color:var(--blue-hi);background:#232d3e}
+#drop .chip{position:absolute;top:0;left:0;padding:.3rem .7rem;font-size:.8rem;font-weight:600;background:var(--panel);border:1px solid var(--line);border-radius:8px 0 8px 0}
+#drop svg{width:28px;height:28px;margin-bottom:.35rem}
+#drop .hint{color:var(--muted);font-size:.9rem}
+#drop.has .hint{display:none}
+#file{display:none}
+/* section picker */
+.picker{margin-top:1.5rem}
+.picker h2{font-size:1rem}
+.lists{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem}
+.profiles{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:1rem}
+.profiles button{padding:.55rem .4rem;font-size:.85rem}
+.profiles button.on{border-color:var(--blue-hi);background:#2b4a8a}
+.detail{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1rem}
+.detail>span{font-size:.85rem;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg label{padding:.45rem .95rem;font-size:.85rem;font-weight:600;cursor:pointer;background:var(--inset);color:var(--muted)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:#2b4a8a;color:var(--text)}
+.seg label:has(input:focus-visible){outline:2px solid var(--blue-hi);outline-offset:-2px}
+.count{margin:.75rem 0 0;font-size:.85rem;color:var(--muted)}
+@media(max-width:520px){.profiles{grid-template-columns:1fr}}
+.list{margin:0;padding:0;border:0;min-width:0}
+.list legend{padding:0;margin-bottom:.6rem;font-size:.85rem;font-weight:600}
+.list.act legend{color:var(--act)}.list.info legend{color:var(--info)}
+.opts{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:.4rem}
+.opt{display:flex;align-items:center;gap:.7rem;padding:.65rem .7rem;border-radius:6px;cursor:pointer;font-size:.92rem}
+.opt:hover{background:#26324a}
+.opt input{flex:none;width:1.05rem;height:1.05rem;margin:0;accent-color:var(--blue-hi)}
+@media(max-width:700px){.lists{grid-template-columns:1fr}}
+/* buttons */
+button,.btn{display:block;width:100%;padding:.8rem;border:1px solid var(--line);border-radius:8px;font:inherit;font-weight:600;color:var(--text);
+ text-align:center;text-decoration:none;cursor:pointer;background:#4a5568;transition:background .15s}
+button:hover,.btn:hover{background:#556074}
+#go{margin-top:1rem;border-color:var(--blue);background:var(--blue)}
+#go:hover{background:var(--blue-hi)}
+button:disabled{opacity:.55;cursor:wait}
+#cancel{margin-top:.6rem}
+[hidden]{display:none!important}
+.bar{height:4px;margin-top:.9rem;border-radius:4px;overflow:hidden;display:none;background:var(--inset)}
+.bar.on{display:block}
+.bar i{display:block;height:100%;width:0;background:var(--blue-hi);transition:width .15s}
+.bar.wait i{width:35%;animation:s 1.1s ease-in-out infinite alternate}  /* indeterminate: server is working */
+@keyframes s{from{margin-left:0}to{margin-left:65%}}
+@media(prefers-reduced-motion:reduce){.bar.wait i{animation:none;width:100%}}
+/* status notice */
+.note{display:flex;align-items:center;gap:.6rem;margin-top:.9rem;padding:.65rem .9rem;border-radius:8px;border:1px solid var(--line);background:var(--inset);font-size:.9rem}
+.note::before{content:"";flex:none;width:.55rem;height:.55rem;border-radius:50%;background:var(--blue-hi)}
+.note.ok::before{background:#4ade80}
+.note.cancelled{border-color:#7a6a3a}.note.cancelled::before{background:#fbbf24}
+.note.error{border-color:#7f3a3a}.note.error::before{background:#f87171}
+/* results */
+#results{display:none}
+#results.on{display:grid;gap:1rem}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:1.75rem;margin-top:1.25rem}
+.col{min-width:0}
+.col[hidden]{display:none}
+.cols.one{grid-template-columns:1fr}
+.col>h3{margin:0 0 .75rem;font-size:.95rem;font-weight:600}
+.col.act>h3{color:var(--act)}.col.info>h3{color:var(--info)}
+.box{background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:.5rem 1.4rem}
+.card{padding:1.15rem 0;border-bottom:1px solid var(--line);contain:layout paint style;content-visibility:auto;contain-intrinsic-size:auto 9rem}
+.card:last-child{border-bottom:0}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.6rem}
+.copy{width:auto;display:inline-flex;align-items:center;gap:.35rem;padding:.25rem .6rem;margin:0;font-size:.78rem;font-weight:600;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:6px}
+.copy:hover{color:var(--text);background:#2c3648}
+.copy svg{width:14px;height:14px}
+.copy.done{color:var(--text);border-color:var(--blue-hi)}
+.copy:focus-visible{outline:2px solid var(--blue-hi);outline-offset:2px}
+.card h4{margin:0;font-size:.75rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+#act .card h4{color:var(--act)}#info .card h4{color:var(--info)}
+.card.lead p{font-size:1.08rem;line-height:1.7}
+.card p{margin:0}.card ul{margin:0;padding-left:1.2rem}.card li{margin:.5rem 0;padding-left:.15rem}.card li::marker{color:var(--blue-hi)}.card ul ul{margin:.2rem 0}
+.empty{margin:.75rem 0;color:var(--muted);font-style:italic}
+.dls{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:1rem}
+@media(max-width:700px){.cols,.dls{grid-template-columns:1fr}}
+</style></head><body><main>
+<form id="f" class="panel">
+ <h1>Audio Mode</h1><p class="sub">Upload a recording or a transcript (.md / .txt) to get a summary. Recordings also give a downloadable transcript.</p>
+ <label id="drop" for="file">
+  <span class="chip">Audio file or transcript</span>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4l4 4M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+  <strong id="name">Drop Audio or Transcript Here</strong>
+  <span class="hint">- or -</span>
+  <span class="hint" style="color:var(--text)">Click to Upload</span>
+ </label>
+ <input id="file" type="file" name="file" accept="audio/*,video/*,.md,.txt" required>
+<div class="picker">
+  <h2>Summary Sections</h2><p class="sub">Pick what the notes should include. Only the ticked sections are generated.</p>
+  <div class="detail"><span>Level of detail</span>
+   <div class="seg" role="radiogroup" aria-label="Level of detail">
+    <label><input type="radio" name="detail" value="concise" checked>Concise</label>
+    <label><input type="radio" name="detail" value="detailed">Detailed</label>
+   </div>
+  </div>
+  <div class="profiles" id="profiles" role="group" aria-label="Section profiles">
+   <button type="button" data-p="action">Action Profile</button>
+   <button type="button" data-p="information">Information Profile</button>
+   <button type="button" data-p="complete">Complete Profile</button>
+  </div>
+  <div class="lists">
+   <fieldset class="list act"><legend>Action-oriented sections</legend><div class="opts" id="listAct"></div></fieldset>
+   <fieldset class="list info"><legend>Information-oriented sections</legend><div class="opts" id="listInfo"></div></fieldset>
+  </div>
+  <p class="count" id="count"></p>
+ </div>
+ <button id="go">Analyze Meeting</button>
+ <button type="button" id="cancel" hidden>Cancel</button>
+ <div class="bar" id="bar"><i id="fill"></i></div><div id="status" class="note" role="status" hidden></div>
+</form>
+<div id="results">
+ <section class="panel">
+  <h2>Meeting Analysis</h2>
+  <div class="cols">
+   <div class="col act" id="colAct"><h3>Action-oriented sections</h3><div class="box" id="act"></div></div>
+   <div class="col info" id="colInfo"><h3>Information-oriented sections</h3><div class="box" id="info"></div></div>
+  </div>
+  <div class="dls">
+   <a class="btn" id="dlsum" download="summary.md">Download summary</a>
+   <a class="btn" id="dl" download="transcript.txt">Download transcript</a>
+  </div>
+ </section>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id),file=$("file"),drop=$("drop");
+const say=(text,kind="")=>{const n=$("status");n.textContent=text;n.className="note "+kind;n.hidden=!text};
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+
+function body(lines){ // tiny markdown: paragraphs, nested "- " bullets
+ let html="",depth=-1;
+ for(const raw of lines){
+  const m=raw.match(/^(\s*)[-*]\s+(.*)/);
+  if(m){const d=Math.floor(m[1].length/2);
+   while(depth<d){html+="<ul>";depth++}
+   while(depth>d){html+="</ul>";depth--}
+   html+="<li>"+inline(m[2])+"</li>";
+  }else if(raw.trim()){while(depth>=0){html+="</ul>";depth--}html+="<p>"+inline(raw.trim())+"</p>"}
+ }
+ while(depth>=0){html+="</ul>";depth--}
+ return html;
+}
+function sections(md){ // [{title, lines}] split on "## " headings
+ const out=[];let cur=null;
+ for(const line of md.split(/\r?\n/)){
+  const h=line.match(/^#{1,3}\s+(.*)/);
+  if(h){if(/^meeting summary$/i.test(h[1].trim()))continue;cur={title:h[1].trim(),lines:[]};out.push(cur)}
+  else if(cur)cur.lines.push(line);
+ }
+ return out;
+}
+let COPY=[]; // plain text per card; the DOM can't be used (content-visibility hides off-screen text)
+function copyText(text){
+ if(navigator.clipboard)return navigator.clipboard.writeText(text);
+ return new Promise((ok,fail)=>{
+  const t=document.createElement("textarea");
+  t.value=text;t.style.cssText="position:fixed;opacity:0";
+  document.body.appendChild(t);t.select();
+  try{document.execCommand("copy")?ok():fail(new Error("copy failed"))}catch(e){fail(e)}finally{t.remove()}
+ });
+}
+$("results").addEventListener("click",async e=>{
+ const btn=e.target.closest(".copy");if(!btn)return;
+ const label=btn.querySelector("span");
+ let msg="Copied";
+ try{await copyText(COPY[btn.dataset.i])}catch{msg="Failed"}
+ label.textContent=msg;btn.classList.add("done");
+ clearTimeout(btn._t);
+ btn._t=setTimeout(()=>{label.textContent="Copy";btn.classList.remove("done")},1500);
+});
+function render(d,fname,keys=META.profiles.complete){
+ COPY=[];
+ // The model was asked for exactly the selected headings, so match by label; group and order come from the server's list.
+ const chosen=META.sections.filter(m=>keys.includes(m.key));
+ const parsed=new Map(sections(d.summary).map(x=>[x.title.toLowerCase(),x]));
+ const card=(title,lines,cls="")=>{
+  const text=lines.join("\n").trim();
+  const inner=!text||/^none mentioned\.?$/i.test(text)?'<p class="empty">None mentioned.</p>':body(lines);
+  const plain=text&&!/^none mentioned\.?$/i.test(text)?lines.join("\n").replace(/\*\*(.+?)\*\*/g,"$1").trim():"None mentioned.";
+  const i=COPY.push(title+"\n"+plain)-1;
+  const icon='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  return `<div class="card ${cls}"><div class="card-head"><h4>${esc(title)}</h4><button type="button" class="copy" data-i="${i}" aria-label="Copy ${esc(title)}">${icon}<span aria-live="polite">Copy</span></button></div>${inner}</div>`;
+ };
+ const cols={action:[],info:[]};
+ for(const m of chosen){const x=parsed.get(m.label.toLowerCase());cols[m.group].push(card(m.label,x?x.lines:[],m.key==="exec_summary"?"lead":""))}
+ if(![...parsed.keys()].some(t=>chosen.some(m=>m.label.toLowerCase()===t))) // model ignored the headings: show what it wrote
+  for(const x of parsed.values())cols.info.push(card(x.title,x.lines));
+ $("act").innerHTML=cols.action.join("");$("info").innerHTML=cols.info.join("");
+ $("colAct").hidden=!cols.action.length;$("colInfo").hidden=!cols.info.length;
+ document.querySelector(".cols").classList.toggle("one",!cols.action.length||!cols.info.length);
+ const base=(fname||"meeting").replace(/\.[^.]+$/,"");
+ const link=(id,text,type,name)=>{$(id).href=URL.createObjectURL(new Blob([text.trim()+"\n"],{type}));$(id).download=name};
+ link("dlsum",d.summary,"text/markdown",base+"-summary.md"); // one file, both columns
+ link("dl",d.transcript,"text/plain",base+"-transcript.txt");
+ $("results").classList.add("on");
+}
+
+const show=()=>{const f=file.files[0];$("name").textContent=f?f.name:"Drop Audio or Transcript Here";drop.classList.toggle("has",!!f)};
+file.onchange=show;
+["dragover","dragenter"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>{file.files=e.dataTransfer.files;show()});
+// section checklist, built from the server's list so the page never hard-codes it
+let META={sections:[],profiles:{}};
+const picked=()=>[...document.querySelectorAll(".opt input:checked")].map(i=>i.value);
+async function loadSections(){
+ META=await (await fetch("/api/sections")).json();
+ for(const s of META.sections)
+  $(s.group==="action"?"listAct":"listInfo").insertAdjacentHTML("beforeend",
+   `<label class="opt"><input type="checkbox" value="${s.key}" checked><span>${esc(s.label)}</span></label>`);
+}
+const same=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
+const SAVE="meetingnotes.prefs";
+const save=()=>{try{localStorage.setItem(SAVE,JSON.stringify({sections:picked(),detail:new FormData($("f")).get("detail")}))}catch{}};
+const restore=()=>{try{
+ const v=JSON.parse(localStorage.getItem(SAVE)||"null");if(!v)return;
+ document.querySelectorAll(".opt input").forEach(i=>i.checked=v.sections.includes(i.value));
+ const r=document.querySelector(`input[name=detail][value="${v.detail}"]`);if(r)r.checked=true;
+}catch{}};
+function sync(){ // counter, Analyze availability, profile highlight, remembered choice
+ const p=picked();
+ $("count").textContent=p.length?`${p.length} of ${META.sections.length} selected`:"Select at least one section.";
+ $("go").disabled=!p.length;save();
+ document.querySelectorAll("#profiles button").forEach(b=>b.classList.toggle("on",same(p,META.profiles[b.dataset.p]||[])));
+}
+$("profiles").onclick=e=>{
+ const b=e.target.closest("button");if(!b)return;
+ const set=META.profiles[b.dataset.p];
+ document.querySelectorAll(".opt input").forEach(i=>i.checked=set.includes(i.value));sync();
+};
+document.querySelector(".picker").addEventListener("change",sync);
+loadSections().then(()=>{restore();sync()});
+let ctl;
+// XMLHttpRequest because fetch cannot report upload progress; onUp(loaded,total) while sending, onUp(null) once the upload is done
+const send=(fd,onUp)=>new Promise((res,rej)=>{
+ const x=new XMLHttpRequest();x.open("POST","/process");
+ x.upload.onprogress=e=>e.lengthComputable&&onUp(e.loaded,e.total);
+ x.upload.onload=()=>onUp(null);
+ x.onload=()=>x.status>=200&&x.status<300?res(JSON.parse(x.responseText)):rej(new Error(x.responseText||x.statusText));
+ x.onerror=()=>rej(new Error("Network error"));
+ x.onabort=()=>rej(Object.assign(new Error("aborted"),{name:"AbortError"}));
+ ctl=x;x.send(fd)});
+const selection=()=>{const fd=new FormData($("f"));fd.set("sections",JSON.stringify(picked()));return fd};
+const mb=n=>(n/1048576).toFixed(1);
+$("cancel").onclick=()=>ctl?.abort();
+$("f").onsubmit=async e=>{e.preventDefault();
+ $("go").disabled=true;$("cancel").hidden=false;$("results").classList.remove("on");
+ const bar=$("bar"),fill=$("fill");bar.className="bar on";fill.style.width="0";say("Uploading… 0%");
+ try{const chosenKeys=picked();
+ const d=await send(selection(),(l,t)=>{
+   if(l===null){bar.classList.add("wait");fill.style.width="";say("Upload complete. Transcribing and summarizing…");return}
+   fill.style.width=(l/t*100)+"%";say(`Uploading… ${Math.round(l/t*100)}% (${mb(l)} / ${mb(t)} MB)`)});
+  if(d.cancelled)say("Request cancelled.","cancelled");
+  else{render(d,file.files[0]?.name,chosenKeys);say("Done.","ok")}}
+ catch(err){err.name==="AbortError"?say("Request cancelled.","cancelled"):say("Error: "+err.message,"error")}
+ sync();$("cancel").hidden=true;$("bar").className="bar"};
+</script></body></html>

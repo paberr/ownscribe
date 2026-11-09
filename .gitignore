@@ -34,3 +34,9 @@ swift/.build/
 
 # asciinema recordings (regenerated from scripts/)
 *.cast
+
+# Local meeting recordings
+Record-*.aac
+
+# Web UI result cache
+webui/.cache/
