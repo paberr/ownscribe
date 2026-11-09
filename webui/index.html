@@ -91,15 +91,15 @@ button:disabled{opacity:.55;cursor:wait}
 @media(max-width:700px){.cols,.dls{grid-template-columns:1fr}}
 </style></head><body><main>
 <form id="f" class="panel">
- <h1>Audio Mode</h1><p class="sub">Upload a recording to get a summary and a downloadable transcript.</p>
+ <h1>Audio Mode</h1><p class="sub">Upload a recording or a transcript (.md / .txt) to get a summary. Recordings also give a downloadable transcript.</p>
  <label id="drop" for="file">
-  <span class="chip">Recording or audio file</span>
+  <span class="chip">Audio file or transcript</span>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4l4 4M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
-  <strong id="name">Drop Audio Here</strong>
+  <strong id="name">Drop Audio or Transcript Here</strong>
   <span class="hint">- or -</span>
   <span class="hint" style="color:var(--text)">Click to Upload</span>
  </label>
- <input id="file" type="file" name="file" accept="audio/*,video/*" required>
+ <input id="file" type="file" name="file" accept="audio/*,video/*,.md,.txt" required>
 <div class="picker">
   <h2>Summary Sections</h2><p class="sub">Pick what the notes should include. Only the ticked sections are generated.</p>
   <div class="detail"><span>Level of detail</span>
@@ -211,7 +211,7 @@ function render(d,fname,keys=META.profiles.complete){
  $("results").classList.add("on");
 }
 
-const show=()=>{const f=file.files[0];$("name").textContent=f?f.name:"Drop Audio Here";drop.classList.toggle("has",!!f)};
+const show=()=>{const f=file.files[0];$("name").textContent=f?f.name:"Drop Audio or Transcript Here";drop.classList.toggle("has",!!f)};
 file.onchange=show;
 ["dragover","dragenter"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over")}));
 ["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over")}));
