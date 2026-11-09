@@ -106,7 +106,37 @@ def api_sections():
     return {"sections": sections.SECTIONS, "profiles": sections.PROFILES}
 
 
+TEXT_SUFFIXES = {".md", ".txt"}  # an uploaded transcript skips Whisper and goes straight to the summary step
+
+
+def summarize(transcript: str, cancel: threading.Event, keys: list, detail: str) -> dict:
+    if cancel.is_set():
+        raise Cancelled
+    tpl = sections.build_template(keys, detail)
+    cfg = dataclasses.replace(
+        config,
+        summarization=dataclasses.replace(config.summarization, template="web", context_size=SUMMARY_CONTEXT),
+        templates={**config.templates, "web": TemplateConfig(**tpl)},
+    )
+    summarizer = WebSummarizer(cfg.summarization, cfg.templates)
+    if not summarizer.is_available():
+        raise HTTPException(502, f"Summarizer not reachable at {config.summarization.host}")
+    try:
+        cleaned = sections.clean_transcript(transcript)  # the model sees it tighter; the download stays raw
+        skey = hashlib.sha256(
+            f"{config.summarization.model}|{tpl['system_prompt']}|{tpl['prompt']}|{cleaned}".encode()).hexdigest()
+        summary = cached(f"{skey}.summary.md", lambda: sections.normalize_lists(summarizer.summarize(cleaned)))
+    finally:
+        summarizer.close()
+    return {"transcript": transcript, "summary": summary}
+
+
 def work(data: bytes, suffix: str, cancel: threading.Event, keys: list, detail: str) -> dict:
+    if suffix.lower() in TEXT_SUFFIXES:
+        transcript = data.decode("utf-8-sig", errors="replace").strip()
+        if not transcript:
+            raise HTTPException(400, "The transcript file is empty.")
+        return summarize(transcript, cancel, keys, detail)
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(data)
     try:
@@ -115,25 +145,7 @@ def work(data: bytes, suffix: str, cancel: threading.Event, keys: list, detail: 
             transcript = cached(f"{key}.transcript.txt", lambda: transcribe(tmp.name, cancel, key))
         except openai.APIError as e:
             raise HTTPException(502, f"Whisper endpoint error: {e}")
-        if cancel.is_set():
-            raise Cancelled
-        tpl = sections.build_template(keys, detail)
-        cfg = dataclasses.replace(
-            config,
-            summarization=dataclasses.replace(config.summarization, template="web", context_size=SUMMARY_CONTEXT),
-            templates={**config.templates, "web": TemplateConfig(**tpl)},
-        )
-        summarizer = WebSummarizer(cfg.summarization, cfg.templates)
-        if not summarizer.is_available():
-            raise HTTPException(502, f"Summarizer not reachable at {config.summarization.host}")
-        try:
-            cleaned = sections.clean_transcript(transcript)  # the model sees it tighter; the download stays raw
-            skey = hashlib.sha256(
-                f"{config.summarization.model}|{tpl['system_prompt']}|{tpl['prompt']}|{cleaned}".encode()).hexdigest()
-            summary = cached(f"{skey}.summary.md", lambda: sections.normalize_lists(summarizer.summarize(cleaned)))
-        finally:
-            summarizer.close()
-        return {"transcript": transcript, "summary": summary}
+        return summarize(transcript, cancel, keys, detail)
     finally:
         os.unlink(tmp.name)
 
